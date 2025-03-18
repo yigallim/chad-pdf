@@ -6,13 +6,7 @@ import Sidebar from "./sidebar";
 import Header from "./header";
 import { createStyles } from "antd-style";
 import Content from "./content";
-
-const defaultConversationsItems = [
-  {
-    key: "0",
-    label: "What is Ant Design X?",
-  },
-];
+import { useConversationValue } from "@/hooks/use-conversation";
 
 const roles: GetProp<typeof Bubble.List, "roles"> = {
   ai: {
@@ -54,22 +48,9 @@ const Independent: React.FC = () => {
   const [isLoaded, setIsLoaded] = React.useState(false);
   const [headerOpen, setHeaderOpen] = React.useState(false);
   const [content, setContent] = React.useState("");
-  const [activeKey, setActiveKey] = React.useState(defaultConversationsItems[0].key);
-  const [conversationsItems, setConversationsItems] = React.useState(defaultConversationsItems);
   const [attachedFiles, setAttachedFiles] = React.useState<GetProp<typeof Attachments, "items">>(
     []
   );
-
-  const onAddConversation = () => {
-    setConversationsItems([
-      ...conversationsItems,
-      {
-        key: `${conversationsItems.length}`,
-        label: `New Conversation ${conversationsItems.length}`,
-      },
-    ]);
-    setActiveKey(`${conversationsItems.length}`);
-  };
 
   const [agent] = useXAgent({
     request: async ({ message }, { onSuccess }) => {
@@ -79,11 +60,12 @@ const Independent: React.FC = () => {
 
   const { onRequest, messages, setMessages } = useXChat({ agent });
 
+  const { currentConversationKey } = useConversationValue();
   React.useEffect(() => {
-    if (activeKey !== undefined) {
+    if (currentConversationKey !== undefined) {
       setMessages([]);
     }
-  }, [activeKey]);
+  }, [currentConversationKey]);
 
   React.useEffect(() => {
     if (document.readyState === "complete") {
@@ -142,12 +124,7 @@ const Independent: React.FC = () => {
 
   return (
     <div className={styles.container}>
-      <Sidebar
-        conversationsItems={conversationsItems}
-        activeKey={activeKey}
-        onConversationClick={(key) => setActiveKey(key)}
-        onAddConversation={onAddConversation}
-      />
+      <Sidebar />
       <main className={styles.main}>
         <Header />
         <Content messages={messages} roles={roles} />

@@ -1,8 +1,9 @@
 import React from "react";
-import { Button } from "antd";
+import { Button, Typography } from "antd";
 import { Conversations, ConversationsProps } from "@ant-design/x";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { createStyles } from "antd-style";
+import { useConversationActions, useConversationValue } from "@/hooks/use-conversation";
 
 const useStyles = createStyles(({ css }) => ({
   sidebar: css`
@@ -39,13 +40,6 @@ const useStyles = createStyles(({ css }) => ({
   `,
 }));
 
-interface SidebarProps {
-  conversationsItems: ConversationsProps["items"];
-  activeKey: string;
-  onConversationClick: (key: string) => void;
-  onAddConversation: () => void;
-}
-
 const menuConfig: ConversationsProps["menu"] = (conversation) => ({
   items: [
     {
@@ -65,19 +59,22 @@ const menuConfig: ConversationsProps["menu"] = (conversation) => ({
   },
 });
 
-const Sidebar: React.FC<SidebarProps> = ({
-  conversationsItems,
-  activeKey,
-  onConversationClick,
-  onAddConversation,
-}) => {
+const Sidebar = () => {
   const { styles } = useStyles();
+  const { setCurrentConversation, addConversation } = useConversationActions();
+  const { items, currentConversationKey } = useConversationValue();
+
+  const onAddConversation = () => {
+    addConversation(`New Conversation ${items.length}`);
+  };
+
+  const onConversationClick = (key: string) => setCurrentConversation(key);
 
   return (
     <div className={styles.sidebar}>
       <div className={styles.header}>
         <img src="original.svg" alt="logo" className={styles.logo} />
-        <span className={styles.title}>Ant Design X</span>
+        <Typography.Text className={styles.title}>Ant Design X</Typography.Text>
       </div>
       <Button
         color="primary"
@@ -89,9 +86,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         New Conversation
       </Button>
       <Conversations
-        items={conversationsItems}
+        items={items}
         className={styles.conversations}
-        activeKey={activeKey}
+        activeKey={currentConversationKey}
         menu={menuConfig}
         onActiveChange={onConversationClick}
       />
