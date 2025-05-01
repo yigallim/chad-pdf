@@ -8,15 +8,12 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain_community.vectorstores import USearch
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-import base64
-from google import genai
-from google.genai import types
-from dotenv import load_dotenv
-import os
+from transformers import pipeline, AutoTokenizer
+from nltk.tokenize import sent_tokenize
+import nltk
 
-load_dotenv()
-
-HF_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+nltk.download('punkt_tab')
+nltk.download("punkt")
 
 # extract text from pdf
 def get_pdf_content(pdf):
@@ -55,6 +52,46 @@ def compute_similarity(pdf_path1,pdf_path2):
     similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
 
     return similarity
+
+def _chunks_for_sentiment(text, tokenizer):
+    max_tokens = 500
+    token_ids  = tokenizer.encode(text, add_special_tokens=True)
+    for i in range(0, len(token_ids), max_tokens):
+        chunk_ids = token_ids[i:i + max_tokens]
+        decoded_chunk = tokenizer.decode(chunk_ids, skip_special_tokens=True)
+        yield decoded_chunk
+
+def _compute_weighted_sentiment(predictions):
+    sentiment_weights = {'positive': 1, 'neutral': 0, 'negative': -1}
+    total_weighted_score = 0
+    total_score = 0
+
+    for pred in predictions:
+        label = pred['label'].lower()
+        score = pred['score']
+        weight = sentiment_weights.get(label, 0)
+        total_weighted_score += weight * score
+        total_score += score
+
+    if total_score == 0:
+        return 0  # Avoid division by zero
+
+    weighted_average = total_weighted_score / total_score
+    return weighted_average
+
+def compute_sentiment(text):
+    model_name = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+    sentiment_pipeline = pipeline("sentiment-analysis", model=model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    sentiments = []
+    sentences = sent_tokenize(text)  # Split text into sentences
+
+    for sentence in sentences:
+        for chunk in _chunks_for_sentiment(sentence,tokenizer):
+            result = sentiment_pipeline(chunk)
+            sentiments.append(result[0])
+    return _compute_weighted_sentiment(sentiments)
 
 def get_vectorstore(model_name, text_chunks):
     embedding_model = HuggingFaceEmbeddings(model_name=model_name)

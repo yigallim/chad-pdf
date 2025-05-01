@@ -11,8 +11,12 @@ def process_pdfs(pdf_list):
         pdf_info=[]
         # process pdf
         # db.load_pdf_by_filename(pdf)
-        db.store_pdf_if_new(pdf)
-        # with open(pdf, 'rb') as input_file:
+       
+        # db.store_pdf_if_new(pdf)
+        with open(pdf, 'rb') as input_file:
+            text = "".join(be.get_pdf_content(input_file))
+            sentiments = be.compute_sentiment(text)
+            print(sentiments)
         #     pdf_info = be.extract_information(input_file)
         #     for page_info in pdf_info:
         #         vectorstore = be.get_vectorstore(page_info['chunks'])
