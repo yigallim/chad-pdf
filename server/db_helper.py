@@ -3,7 +3,7 @@ from pymongo import MongoClient
 import os
 
 client = MongoClient("mongodb://localhost:27017/")
-db = client["pdf"]
+db = client["chad_pdf"]
 collection = db["pdf_files"]
 
 # Compute SHA-256 hash of PDF content
