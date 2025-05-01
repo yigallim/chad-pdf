@@ -1,5 +1,5 @@
 import { configureStore } from "@reduxjs/toolkit";
-import conversationReducer from "./conversation-slice";
+import conversationReducer from "./slices/conversation-slice";
 
 export const store = configureStore({
   reducer: {

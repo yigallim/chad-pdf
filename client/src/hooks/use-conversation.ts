@@ -1,27 +1,30 @@
 import { useDispatch, useSelector } from "react-redux";
-import { RootState } from "@/store";
+import { RootState, AppDispatch } from "@/store";
 import {
   addConversation,
   deleteConversation,
-  setCurrentConversation,
-} from "@/store/conversation-slice";
+  setConversation,
+  revalidateConversation,
+  Conversation,
+} from "@/store/slices/conversation-slice";
 import { createSelector } from "@reduxjs/toolkit";
 
-const selectConversationState = createSelector(
+const selectConversationItems = createSelector(
   (state: RootState) => state.conversation.items,
-  (state: RootState) => state.conversation.currentConversationKey,
-  (items, currentConversationKey) => ({ items, currentConversationKey })
+  (items) => ({ items })
 );
 
 export const useConversationValue = () => {
-  return useSelector(selectConversationState);
+  return useSelector(selectConversationItems);
 };
 
 export const useConversationActions = () => {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
+
   return {
     addConversation: (label: string) => dispatch(addConversation({ label })),
     deleteConversation: (key: string) => dispatch(deleteConversation(key)),
-    setCurrentConversation: (key: string) => dispatch(setCurrentConversation(key)),
+    setConversation: (payload: Conversation[]) => dispatch(setConversation(payload)),
+    revalidateConversation: () => dispatch(revalidateConversation()),
   };
 };

@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+html,
+body {
+  @apply h-full w-full m-0 p-0;
+}
+
+#root,
+#root > :first-child {
+  @apply h-full w-full;
+}

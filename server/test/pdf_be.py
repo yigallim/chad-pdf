@@ -1,0 +1,113 @@
+# pip install google-genai
+# pip install dotenv
+from PyPDF2 import PdfReader
+from langchain.text_splitter import CharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.memory import ConversationBufferMemory
+from langchain.chains import ConversationalRetrievalChain
+from langchain_community.vectorstores import USearch
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from transformers import pipeline, AutoTokenizer
+from nltk.tokenize import sent_tokenize
+import nltk
+
+nltk.download('punkt_tab')
+nltk.download("punkt")
+
+# extract text from pdf
+def get_pdf_content(pdf):
+    content = []
+    pdf_reader = PdfReader(pdf)
+    for page in pdf_reader.pages:
+        content.append(page.extract_text())
+    return content
+
+# split text into chunks
+def get_text_chunks(text):
+    text_splitter = CharacterTextSplitter(
+        separator="\n",
+        chunk_size=1000,
+        chunk_overlap=200, # overlapping text to preserve continuity between chunks
+        length_function=len
+    )
+    chunks = text_splitter.split_text(text)
+    return chunks
+
+def extract_information(file):
+    pdf_info = []
+    content = get_pdf_content(file)
+    for page_num, text in enumerate(content):
+        chunks = get_text_chunks(text)
+        pdf_info.append({"page":page_num,"chunks":chunks})
+    return pdf_info
+
+def compute_similarity(pdf_path1,pdf_path2):
+    text1 = get_pdf_content(pdf_path1)
+    text2 = get_pdf_content(pdf_path2)
+
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    embeddings = model.encode([text1, text2])
+    similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
+
+    return similarity
+
+def _chunks_for_sentiment(text, tokenizer):
+    max_tokens = 500
+    token_ids  = tokenizer.encode(text, add_special_tokens=True)
+    for i in range(0, len(token_ids), max_tokens):
+        chunk_ids = token_ids[i:i + max_tokens]
+        decoded_chunk = tokenizer.decode(chunk_ids, skip_special_tokens=True)
+        yield decoded_chunk
+
+def _compute_weighted_sentiment(predictions):
+    sentiment_weights = {'positive': 1, 'neutral': 0, 'negative': -1}
+    total_weighted_score = 0
+    total_score = 0
+
+    for pred in predictions:
+        label = pred['label'].lower()
+        score = pred['score']
+        weight = sentiment_weights.get(label, 0)
+        total_weighted_score += weight * score
+        total_score += score
+
+    if total_score == 0:
+        return 0  # Avoid division by zero
+
+    weighted_average = total_weighted_score / total_score
+    return weighted_average
+
+def compute_sentiment(text):
+    model_name = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+    sentiment_pipeline = pipeline("sentiment-analysis", model=model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    sentiments = []
+    sentences = sent_tokenize(text)  # Split text into sentences
+
+    for sentence in sentences:
+        for chunk in _chunks_for_sentiment(sentence,tokenizer):
+            result = sentiment_pipeline(chunk)
+            sentiments.append(result[0])
+    return _compute_weighted_sentiment(sentiments)
+
+def get_vectorstore(model_name, text_chunks):
+    embedding_model = HuggingFaceEmbeddings(model_name=model_name)
+    vectorstore = USearch.from_texts(text_chunks, embedding_model)
+    return vectorstore
+
+def get_conversation_chain(llm, vectorstore):
+    memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
+    
+    conversation_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=vectorstore.as_retriever(),
+        memory=memory,
+        verbose=True
+    )
+    return conversation_chain
+
+def ask_question(conversation_chain,question):
+    return conversation_chain.run(question)
