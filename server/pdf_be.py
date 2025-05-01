@@ -74,10 +74,3 @@ def get_conversation_chain(llm, vectorstore):
 
 def ask_question(conversation_chain,question):
     return conversation_chain.run(question)
-
-
-import db_helper as db
-path1 = db.get_filepath("huiyee_friend_nlp.pdf")
-path2 = db.get_filepath("2504.13884v1.pdf")
-
-print(compute_similarity(path1,path2))
