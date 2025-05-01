@@ -2,20 +2,21 @@ import os
 import tkinter as tk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import pdf_be as be
+import db_helper as db
 
 def process_pdfs(pdf_list):
     for pdf in pdf_list:
         input_pdf = pdf
         output_pdf = os.path.join("output/", f"{os.path.basename(pdf)}")
-
+        pdf_info=[]
         # process pdf
-        with open(pdf, 'rb') as input_file:
-            pdf_info = be.extract_information(input_file)
-            print(pdf_info)
-        # for i, c in enumerate(chunks):
-        #     print(f"[{i}]: {{{c}}} \n")
-            # if i ==20:
-            #     break
+        # db.load_pdf_by_filename(pdf)
+        db.store_pdf_if_new(pdf)
+        # with open(pdf, 'rb') as input_file:
+        #     pdf_info = be.extract_information(input_file)
+        #     for page_info in pdf_info:
+        #         vectorstore = be.get_vectorstore(page_info['chunks'])
+        #         conversation_chain = be.get_conversation_chain(vectorstore)
 
         status_listbox.insert(tk.END, f"Processed: {os.path.basename(pdf)}")
 
