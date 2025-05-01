@@ -40,7 +40,7 @@ def get_filepath(file_path):
 
     if doc:
         file_id=str(doc["_id"])
-        local_path = os.path.join("pdf_folders", file_id)
+        local_path = os.path.join("pdf_folders", f"{file_id}.pdf")
         if os.path.exists(local_path):
             print(f"📄 Found local PDF: {local_path}")
             return local_path
