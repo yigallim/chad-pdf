@@ -19,19 +19,19 @@ def process_pdfs(pdf_list):
         # db.load_pdf_by_filename(pdf)
        
         # db.store_pdf_if_new(pdf)
-        with open(pdf, 'rb') as input_file:
-            # text = "".join(be.get_pdf_content(input_file))
-            # sentiments = be.compute_sentiment(text)
-            # print(sentiments)
-            pdf_info = be.extract_information(input_file)
-            for page_info in pdf_info:
-                model_name='all-MiniLM-L6-v2'
-                chunks =  page_info['chunks']
-                if global_vectorstore is None:
-                    global_vectorstore = be.get_vectorstore(model_name,chunks)
-                else:
-                    be.update_vectorstore(chunks, global_vectorstore)
-                # conversation_chain = be.get_conversation_chain(vectorstore)
+        
+        # text = "".join(be.get_pdf_content(input_file))
+        # sentiments = be.compute_sentiment(text)
+        # print(sentiments)
+        pdf_info = be.extract_information(pdf)
+        for page_info in pdf_info:
+            model_name='all-MiniLM-L6-v2'
+            chunks =  page_info['chunks']
+            if global_vectorstore is None:
+                global_vectorstore = be.get_vectorstore(model_name,chunks)
+            else:
+                be.update_vectorstore(chunks, global_vectorstore)
+            # conversation_chain = be.get_conversation_chain(vectorstore)
 
         status_listbox.insert(tk.END, f"Processed: {os.path.basename(pdf)}")
 
@@ -110,6 +110,7 @@ while True:
         if first_time:
             id = db.get_all_chat_id()[1]
             history = db.get_chat_history(id)
+            print(history)
             chat = gemini.create_chat(history=history)
             chat_id = db.create_chat(user_input)
             first_time=False

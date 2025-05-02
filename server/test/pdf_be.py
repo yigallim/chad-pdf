@@ -2,7 +2,7 @@
 # pip install dotenv
 import gemini
 import db_helper as db
-from PyPDF2 import PdfReader
+import pdfplumber
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.memory import ConversationBufferMemory
@@ -24,11 +24,20 @@ def _safe_nltk_download(resource_path, download_name=None):
 _safe_nltk_download('tokenizers/punkt')
 
 # extract text from pdf
-def get_pdf_content(pdf):
+def get_pdf_content(pdf_path):
     content = []
-    pdf_reader = PdfReader(pdf)
-    for page in pdf_reader.pages:
-        content.append(page.extract_text())
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            chars = page.chars
+            text = ""
+            for i, char in enumerate(chars[:-1]):
+                text += char["text"]
+                next_char = chars[i + 1]
+                if next_char["x0"] - (char["x1"]) > 2:  # Adjust threshold
+                    text += " "
+            
+            # text = page.extract_text()
+            content.append(text)
     return content
 
 # split text into chunks
@@ -152,4 +161,3 @@ def get_conversation_chain(llm, vectorstore):
 
 def ask_question(conversation_chain,question):
     return conversation_chain.run(question)
-
