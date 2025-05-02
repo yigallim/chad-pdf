@@ -12,8 +12,13 @@ from transformers import pipeline, AutoTokenizer
 from nltk.tokenize import sent_tokenize
 import nltk
 
-nltk.download('punkt_tab')
-nltk.download("punkt")
+def _safe_nltk_download(resource_path, download_name=None):
+    try:
+        nltk.data.find(resource_path)
+    except LookupError:
+        nltk.download(download_name or resource_path.split('/')[-1])
+
+_safe_nltk_download('tokenizers/punkt')
 
 # extract text from pdf
 def get_pdf_content(pdf):
@@ -98,6 +103,25 @@ def get_vectorstore(model_name, text_chunks):
     vectorstore = USearch.from_texts(text_chunks, embedding_model)
     return vectorstore
 
+def update_vectorstore(text_chunks,vectorstore):
+    vectorstore.add_texts(text_chunks)
+
+def retrieve_relevant_chunks(query, vectorstore,top_k=3):
+    results = vectorstore.similarity_search(query,k=top_k)
+    return [doc.page_content for doc in results]
+
+def get_query_with_context(query,relevant_chunks):
+    context = "\n\n".join(relevant_chunks)
+    full_prompt = f"""Use the following context to answer the question.
+
+Context:
+{context}
+
+Question:
+{query}
+"""
+    return full_prompt
+
 def get_conversation_chain(llm, vectorstore):
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     
@@ -111,3 +135,4 @@ def get_conversation_chain(llm, vectorstore):
 
 def ask_question(conversation_chain,question):
     return conversation_chain.run(question)
+

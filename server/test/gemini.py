@@ -1,5 +1,7 @@
+import time
+import random
 from google import genai
-from google.genai import types
+from google.genai import errors as genai_errors
 from dotenv import load_dotenv
 import os
 
@@ -12,7 +14,7 @@ def create_chat():
     chat = client.chats.create(model="gemini-2.0-flash")
     return chat
 
-def send_message(chat, message):
+def send_message(chat, message, max_retries=5, initial_delay=0.5, max_delay=10):
     """
     **To retrieve message - 
     --------------------------------
@@ -20,17 +22,57 @@ def send_message(chat, message):
         print(chunk.text, end="")
     --------------------------------
     """
-    response = chat.send_message_stream(message)
-    return response
+    retries = 0
+    last_exception = None
+    while retries <= max_retries:
+        try:
+            response = chat.send_message_stream(message)
+            for chunk in  response:
+                yield chunk.text
+            return
+        except genai_errors.ClientError as e:
+            retriable = [429,503]
+            if e.code not in retriable:
+                raise Exception(e.message)
+            retry_delay = min(max_delay, (initial_delay * (2 ** retries)) + random.uniform(0, 1))
+            print(f"Error: {e.status} ({e.code}) - {e.message}")
+            print(f"Retrying in {retry_delay:.2f} seconds...")
+            time.sleep(retry_delay)
+            last_exception = e
+            retries += 1
+        except Exception as e: 
+            print(type(e))
+            raise Exception(f"Unexpected error : {e}")
+            
+
+    if last_exception:
+        if isinstance(last_exception, genai_errors.ClientError):
+            if last_exception.code == 429:
+                raise Exception("You have exceeded your current quota. Retry it later.")
+            elif last_exception.code == 503:
+                raise Exception("Service is temporarily unavailable.")
+        raise Exception(f"Failed to send message after {max_retries} retries due to persistent errors: {last_exception}")
+    else:
+        # This should ideally not be reached if there were no retriable errors
+        raise Exception("Failed to send message for an unexpected reason after all retries.")
 
 # test
-chat = create_chat()
-while True:
-    user_input = input("You: ")
-    if user_input.lower() in ['exit', 'quit']:
-        break
+# chat = create_chat()
+# while True:
+#     user_input = input("You: ")
+#     if user_input.lower() in ['exit', 'quit']:
+#         break
 
-    response = send_message(chat, user_input)
-    print("Gemini:")
-    for chunk in response:
-        print(chunk.text, end="")
+#     try:
+#         # Call the safe_send_message function
+#         response = send_message(chat, user_input)
+
+#         # Iterate through the response stream and print each chunk
+#         print("Gemini:")
+#         for chunk in response:
+#             print(chunk, end="")
+#         print()  # Add a newline at the end
+
+#     except Exception as e:
+#         print(type(e))
+#         print(f"\nAn error occurred: {e}")

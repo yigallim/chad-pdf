@@ -3,8 +3,14 @@ import tkinter as tk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import pdf_be as be
 import db_helper as db
+import threading
+import gemini
+
+global_vectorstore = None
 
 def process_pdfs(pdf_list):
+    global global_vectorstore
+    
     for pdf in pdf_list:
         input_pdf = pdf
         output_pdf = os.path.join("output/", f"{os.path.basename(pdf)}")
@@ -14,13 +20,18 @@ def process_pdfs(pdf_list):
        
         # db.store_pdf_if_new(pdf)
         with open(pdf, 'rb') as input_file:
-            text = "".join(be.get_pdf_content(input_file))
-            sentiments = be.compute_sentiment(text)
-            print(sentiments)
-        #     pdf_info = be.extract_information(input_file)
-        #     for page_info in pdf_info:
-        #         vectorstore = be.get_vectorstore(page_info['chunks'])
-        #         conversation_chain = be.get_conversation_chain(vectorstore)
+            # text = "".join(be.get_pdf_content(input_file))
+            # sentiments = be.compute_sentiment(text)
+            # print(sentiments)
+            pdf_info = be.extract_information(input_file)
+            for page_info in pdf_info:
+                model_name='all-MiniLM-L6-v2'
+                chunks =  page_info['chunks']
+                if global_vectorstore is None:
+                    global_vectorstore = be.get_vectorstore(model_name,chunks)
+                else:
+                    be.update_vectorstore(chunks, global_vectorstore)
+                # conversation_chain = be.get_conversation_chain(vectorstore)
 
         status_listbox.insert(tk.END, f"Processed: {os.path.basename(pdf)}")
 
@@ -48,7 +59,9 @@ def on_drop(event):
     status_listbox.pack(fill=tk.BOTH, expand=True)
 
 
-if __name__ == "__main__":
+def start_gui():
+    global root, drop_frame, drop_label, status_listbox
+
     # Initialize TkinterDnD
     root = TkinterDnD.Tk()
     root.title("PDF Processor")
@@ -67,14 +80,45 @@ if __name__ == "__main__":
     # Create a label inside the drop area
     drop_label = tk.Label(drop_frame, text="Drag and drop PDF files here", bg='lightgray')
 
-
     # Create a listbox to display status messages
     status_listbox = tk.Listbox(root, height=10, width=60)
     status_listbox.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-    status_listbox.pack(fill=tk.BOTH,expand=True)
+    status_listbox.pack(fill=tk.BOTH, expand=True)
 
     status_listbox.drop_target_register(DND_FILES)
     status_listbox.dnd_bind('<<DropEnter>>', on_drag_enter)
 
-
+    # Run GUI loop (this keeps running on a separate thread)
     root.mainloop()
+
+# Start GUI in a thread
+gui_thread = threading.Thread(target=start_gui, daemon=True)
+gui_thread.start()
+chat = gemini.create_chat()
+# Main thread for terminal input
+while True:
+    try:
+        user_input = input("You: ").strip()
+        if user_input.lower() == 'exit':
+            print("Exiting...")
+            break
+        if global_vectorstore is None:
+            print("Please upload pdf before conversation")
+            continue
+        try:
+            # Call the safe_send_message function
+            relevant_chunks = be.retrieve_relevant_chunks(user_input,global_vectorstore,3)
+            query = be.get_query_with_context(user_input,relevant_chunks)
+            response = gemini.send_message(chat, query)
+
+            # Iterate through the response stream and print each chunk
+            print("Gemini:")
+            for chunk in response:
+                print(chunk, end="")
+            print()  # Add a newline at the end
+
+        except Exception as e:
+            print(type(e))
+            print(f"\nAn error occurred: {e}")
+    except KeyboardInterrupt:
+        break
