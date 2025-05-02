@@ -41,7 +41,8 @@ def send_message(chat, message, max_retries=5, initial_delay=0.5, max_delay=10):
             time.sleep(retry_delay)
             last_exception = e
             retries += 1
-        #Server error
+        except genai_errors.ServerError as e:
+            raise Exception(f"Server Error : {e.message}")
         except Exception as e: 
             raise Exception(f"Unexpected error : {e}")
             
