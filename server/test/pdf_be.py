@@ -1,5 +1,7 @@
 # pip install google-genai
 # pip install dotenv
+import gemini
+import db_helper as db
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -11,6 +13,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from transformers import pipeline, AutoTokenizer
 from nltk.tokenize import sent_tokenize
 import nltk
+from typing import Optional
 
 def _safe_nltk_download(resource_path, download_name=None):
     try:
@@ -29,7 +32,7 @@ def get_pdf_content(pdf):
     return content
 
 # split text into chunks
-def get_text_chunks(text):
+def get_text_chunks(text:str):
     text_splitter = CharacterTextSplitter(
         separator="\n",
         chunk_size=1000,
@@ -47,7 +50,7 @@ def extract_information(file):
         pdf_info.append({"page":page_num,"chunks":chunks})
     return pdf_info
 
-def compute_similarity(pdf_path1,pdf_path2):
+def compute_similarity(pdf_path1:str,pdf_path2:str):
     text1 = get_pdf_content(pdf_path1)
     text2 = get_pdf_content(pdf_path2)
 
@@ -58,7 +61,7 @@ def compute_similarity(pdf_path1,pdf_path2):
 
     return similarity
 
-def _chunks_for_sentiment(text, tokenizer):
+def _chunks_for_sentiment(text:str, tokenizer):
     max_tokens = 500
     token_ids  = tokenizer.encode(text, add_special_tokens=True)
     for i in range(0, len(token_ids), max_tokens):
@@ -66,7 +69,7 @@ def _chunks_for_sentiment(text, tokenizer):
         decoded_chunk = tokenizer.decode(chunk_ids, skip_special_tokens=True)
         yield decoded_chunk
 
-def _compute_weighted_sentiment(predictions):
+def _compute_weighted_sentiment(predictions:list):
     sentiment_weights = {'positive': 1, 'neutral': 0, 'negative': -1}
     total_weighted_score = 0
     total_score = 0
@@ -84,7 +87,7 @@ def _compute_weighted_sentiment(predictions):
     weighted_average = total_weighted_score / total_score
     return weighted_average
 
-def compute_sentiment(text):
+def compute_sentiment(text:str):
     model_name = "cardiffnlp/twitter-roberta-base-sentiment-latest"
     sentiment_pipeline = pipeline("sentiment-analysis", model=model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -98,7 +101,7 @@ def compute_sentiment(text):
             sentiments.append(result[0])
     return _compute_weighted_sentiment(sentiments)
 
-def get_vectorstore(model_name, text_chunks):
+def get_vectorstore(model_name:str, text_chunks:list[str]):
     embedding_model = HuggingFaceEmbeddings(model_name=model_name)
     vectorstore = USearch.from_texts(text_chunks, embedding_model)
     return vectorstore
@@ -106,11 +109,11 @@ def get_vectorstore(model_name, text_chunks):
 def update_vectorstore(text_chunks,vectorstore):
     vectorstore.add_texts(text_chunks)
 
-def retrieve_relevant_chunks(query, vectorstore,top_k=3):
+def retrieve_relevant_chunks(query:str, vectorstore:USearch,top_k:int=3):
     results = vectorstore.similarity_search(query,k=top_k)
     return [doc.page_content for doc in results]
 
-def get_query_with_context(query,relevant_chunks):
+def get_query_with_context(query:str,relevant_chunks:list[str]):
     context = "\n\n".join(relevant_chunks)
     full_prompt = f"""Use the following context to answer the question.
 
@@ -121,6 +124,20 @@ Question:
 {query}
 """
     return full_prompt
+
+def get_chat_new_messages(user_responses:Optional[list[str]]=None, model_responses:Optional[list[str]]=None):
+    m_texts = []
+    for r in model_responses:
+        m_texts.append({"text": r})
+        
+    u_texts=[]
+    for r in user_responses:
+        u_texts.append({"text": r})
+    
+    user_side={"role": "user", "parts": u_texts}
+    model_side={"role": "model", "parts": m_texts}
+    
+    return [user_side,model_side]
 
 def get_conversation_chain(llm, vectorstore):
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)

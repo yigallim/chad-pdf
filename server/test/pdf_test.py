@@ -94,7 +94,9 @@ def start_gui():
 # Start GUI in a thread
 gui_thread = threading.Thread(target=start_gui, daemon=True)
 gui_thread.start()
-chat = gemini.create_chat()
+chat = None
+chat_id = None
+first_time = True
 # Main thread for terminal input
 while True:
     try:
@@ -105,20 +107,28 @@ while True:
         if global_vectorstore is None:
             print("Please upload pdf before conversation")
             continue
+        if first_time:
+            id = db.get_all_chat_id()[1]
+            history = db.get_chat_history(id)
+            chat = gemini.create_chat(history=history)
+            chat_id = db.create_chat(user_input)
+            first_time=False
         try:
             # Call the safe_send_message function
             relevant_chunks = be.retrieve_relevant_chunks(user_input,global_vectorstore,3)
             query = be.get_query_with_context(user_input,relevant_chunks)
-            response = gemini.send_message(chat, query)
-
-            # Iterate through the response stream and print each chunk
+            
             print("Gemini:")
+            print(query)
+            response = gemini.send_message(chat, query)
+            chunks = []
             for chunk in response:
                 print(chunk, end="")
+                chunks.append(chunk)
             print()  # Add a newline at the end
-
+            new_messages = be.get_chat_new_messages(user_responses=[query],model_responses=chunks)
+            db.update_chat_history(chat_id=chat_id, new_messages=new_messages)
         except Exception as e:
-            print(type(e))
             print(f"\nAn error occurred: {e}")
     except KeyboardInterrupt:
         break

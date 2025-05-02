@@ -1,10 +1,12 @@
 import hashlib
 from pymongo import MongoClient
+from bson import ObjectId
 import os
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["chad_pdf"]
-collection = db["pdf_files"]
+pdf_files_collection = db["pdf_files"]
+chat_history_collection = db["chat_history"]
 
 # Compute SHA-256 hash of PDF content
 def _compute_pdf_hash(file_path):
@@ -15,13 +17,13 @@ def _compute_pdf_hash(file_path):
 # Store PDF if not already in DB
 def store_pdf_if_new(file_path):
     pdf_hash, pdf_data = _compute_pdf_hash(file_path)
-    existing = collection.find_one({"hash": pdf_hash})
+    existing = pdf_files_collection.find_one({"hash": pdf_hash})
     filename = os.path.basename(file_path)
     if existing:
         print(f"✅ PDF '{filename}' already exists in the database (hash matched).")
         return False  # Already exists
     else:
-        result = collection.insert_one({
+        result = pdf_files_collection.insert_one({
             "filename": filename,
             "hash": pdf_hash
         })
@@ -36,7 +38,7 @@ def store_pdf_if_new(file_path):
     
 def get_filepath(file_path):
     filename = os.path.basename(file_path)
-    doc = collection.find_one({"filename": filename})
+    doc = pdf_files_collection.find_one({"filename": filename})
 
     if doc:
         file_id=str(doc["_id"])
@@ -50,3 +52,38 @@ def get_filepath(file_path):
     else:
         print(f"❌ PDF with filename '{filename}' not found in MongoDB.")
         return None
+
+def create_chat(chat_name:str):
+    result = chat_history_collection.insert_one({
+            "chat_name": chat_name,
+            "chat_history": []
+        })
+    return result.inserted_id
+
+def update_chat_history(chat_id:ObjectId,new_messages:list):
+    chat = chat_history_collection.find_one({"_id": chat_id})
+    
+    if not chat:
+        print(f"❌ Chat ('{chat_id}') not found in MongoDB.")
+        raise ValueError(f"Chat with ID {chat_id} not found.")
+    
+    existing_history = chat.get('chat_history',[])
+    existing_history.extend(new_messages)
+    
+    chat_history_collection.update_one(
+        {"_id": chat_id},
+        {"$set": {"chat_history": existing_history}}
+    )
+    print(f"✅ Chat history with chat id ('{chat_id}') updated.")
+
+def get_all_chat_id():
+    chat_ids = chat_history_collection.find({}, {"_id": 1})
+    return [id['_id'] for id in chat_ids]
+
+def get_chat_history(chat_id:ObjectId):
+    chat = chat_history_collection.find_one({"_id": chat_id})
+    if not chat:
+        print(f"❌ Chat ('{chat_id}') not found in MongoDB.")
+        raise ValueError(f"Chat with ID {chat_id} not found.")
+    existing_history = chat.get('chat_history',[])
+    return existing_history

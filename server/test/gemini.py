@@ -4,14 +4,15 @@ from google import genai
 from google.genai import errors as genai_errors
 from dotenv import load_dotenv
 import os
+from typing import Optional
 
 load_dotenv()
 
 GEMINI_TOKEN = os.getenv("GEMINI_API_KEY")
 
-def create_chat():
+def create_chat(history: Optional[list] = None):
     client = genai.Client(api_key=GEMINI_TOKEN)
-    chat = client.chats.create(model="gemini-2.0-flash")
+    chat = client.chats.create(model="gemini-2.0-flash", history=history)
     return chat
 
 def send_message(chat, message, max_retries=5, initial_delay=0.5, max_delay=10):
@@ -40,8 +41,8 @@ def send_message(chat, message, max_retries=5, initial_delay=0.5, max_delay=10):
             time.sleep(retry_delay)
             last_exception = e
             retries += 1
+        #Server error
         except Exception as e: 
-            print(type(e))
             raise Exception(f"Unexpected error : {e}")
             
 
