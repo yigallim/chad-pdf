@@ -23,6 +23,7 @@ def process_pdfs(pdf_list):
         # text = "".join(be.get_pdf_content(input_file))
         # sentiments = be.compute_sentiment(text)
         # print(sentiments)
+        print(f"{be.count_words_pdf(pdf)} words")
         pdf_info = be.extract_information(pdf)
         for page_info in pdf_info:
             model_name='all-MiniLM-L6-v2'

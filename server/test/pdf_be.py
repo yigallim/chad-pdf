@@ -2,7 +2,9 @@
 # pip install dotenv
 import gemini
 import db_helper as db
+import text_processor as tp
 import pdfplumber
+import re
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.memory import ConversationBufferMemory
@@ -23,6 +25,17 @@ def _safe_nltk_download(resource_path, download_name=None):
 
 _safe_nltk_download('tokenizers/punkt')
 
+def count_words_pdf(file_path):
+    text = ' '.join(get_pdf_content(file_path))
+
+    text = re.sub(r'\s+', ' ', text.strip())
+    text = tp.clean_symbols(text)
+
+    words = text.split()
+
+    word_count = len(words)
+    return word_count
+
 # extract text from pdf
 def get_pdf_content(pdf_path):
     content = []
@@ -35,8 +48,6 @@ def get_pdf_content(pdf_path):
                 next_char = chars[i + 1]
                 if next_char["x0"] - (char["x1"]) > 2:  # Adjust threshold
                     text += " "
-            
-            # text = page.extract_text()
             content.append(text)
     return content
 
