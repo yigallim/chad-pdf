@@ -10,6 +10,7 @@ import {
   Card,
   CheckboxChangeEvent,
   Pagination,
+  Empty,
 } from "antd";
 import { Document, Page } from "react-pdf";
 import { cn, withPdfPath } from "@/libs/utils";
@@ -176,8 +177,8 @@ export default React.memo(function ExistingPDFModal({
       open={open}
       onCancel={handleCancel}
       destroyOnClose
-      style={{ minWidth: 800 }}
-      width={800}
+      style={{ minWidth: 760 }}
+      width={760}
       footer={[
         <Button key="upload" onClick={onUploadNew}>
           Upload New PDF
@@ -227,25 +228,32 @@ export default React.memo(function ExistingPDFModal({
             </Checkbox>
           </div>
           <div>
-            <div className="border border-neutral-200 rounded-md p-2 h-[468px]">
+            <div className="border border-neutral-200 rounded-md h-[476px]">
               {loading ? (
                 <div className="flex justify-center py-10">
                   <Spin />
                 </div>
               ) : pdfs.length === 0 ? (
-                <Typography.Text type="secondary" className="block text-center py-4">
-                  No PDFs available. Please upload a new PDF.
-                </Typography.Text>
+                <div className="w-full h-full grid place-content-center">
+                  <Empty
+                    description={
+                      <Typography.Text>
+                        No PDFs available. <br />
+                        Please upload a new PDF.
+                      </Typography.Text>
+                    }
+                  />
+                </div>
               ) : (
                 <div className="flex flex-col justify-between h-full">
-                  <div className="flex flex-wrap p-2">
+                  <div className="flex flex-wrap p-2 gap-2">
                     {currentPageItems.map((pdf) => {
                       const disabled = disabledPDFIds.includes(pdf.id);
                       return (
                         <div
                           key={pdf.id}
                           className="w-1/3 max-w-1/3"
-                          style={{ width: "calc(33.33%)" }}
+                          style={{ width: "calc(33.33% - 16px / 3)" }}
                         >
                           <Card
                             onClick={() => !disabled && togglePDFSelection(pdf.id)}
@@ -309,7 +317,7 @@ export default React.memo(function ExistingPDFModal({
                       );
                     })}
                   </div>
-                  <div className="flex justify-center">
+                  <div className="flex justify-center my-2">
                     <Pagination
                       current={currentPage}
                       total={totalItems}

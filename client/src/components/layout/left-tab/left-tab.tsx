@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Segmented } from "antd";
 import { FilePdfOutlined, ShareAltOutlined, SmileOutlined } from "@ant-design/icons";
 import DocumentGraph from "@/components/layout/left-tab/document-graph";
-import ViewPDF from "@/components/layout/left-tab/view-pdf";
+import ViewPDF from "@/components/layout/left-tab/view-pdf/view-pdf";
 import SentimentAnalysis from "./senitment-analysis";
 
 type Tab = "pdf" | "relation" | "sentiment";

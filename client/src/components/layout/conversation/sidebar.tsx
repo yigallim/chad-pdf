@@ -1,19 +1,19 @@
-import { useEffect, useState } from "react";
-import { PlusOutlined, MoreOutlined, FilePdfOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState } from "react";
+import {
+  PlusOutlined,
+  MoreOutlined,
+  FilePdfOutlined,
+  DeleteOutlined,
+  EditOutlined,
+} from "@ant-design/icons";
 import { App, Button, Typography, Dropdown, MenuProps, Input, Divider } from "antd";
 import { createStyles } from "antd-style";
 import { useConversationActions, useConversationValue } from "@/hooks/use-conversation";
-import UploadPDFModal from "../pdf/upload-pdf-modal";
-import ExistingPDFModal from "../pdf/existing-pdf-modal";
 import apiClient from "@/service/api";
 import { Conversation } from "@/store/slices/conversation-slice";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/libs/utils";
-
-type PDFItem = {
-  id: string;
-  filename: string;
-};
+import NewConversation from "./new-conversation";
 
 const useStyles = createStyles(({ css }) => ({
   sidebar: css`
@@ -39,10 +39,6 @@ const useStyles = createStyles(({ css }) => ({
     font-size: 16px;
     margin-left: 8px;
   `,
-  button: css`
-    width: calc(100% - 24px);
-    margin: 0 12px 16px;
-  `,
 }));
 
 const SideBar = () => {
@@ -53,55 +49,9 @@ const SideBar = () => {
   const { styles } = useStyles();
   const { revalidateConversation } = useConversationActions();
   const { items, loading } = useConversationValue();
-  const [existingPDFModalOpen, setExistingPDFModalOpen] = useState(false);
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>("");
-
-  const onAddConversation = () => {
-    setExistingPDFModalOpen(true);
-  };
-
-  const handleUploadNewPDF = () => {
-    setExistingPDFModalOpen(false);
-    setUploadModalOpen(true);
-  };
-
-  const handleUploadModalOk = () => {
-    setUploadModalOpen(false);
-    setExistingPDFModalOpen(true);
-  };
-
-  const handleUploadModalCancel = () => {
-    setUploadModalOpen(false);
-    setExistingPDFModalOpen(true);
-  };
-
-  const handleExistingPDFModalOk = async (selectedPDFs: PDFItem[], conversationName?: string) => {
-    if (selectedPDFs.length <= 0) return;
-
-    try {
-      const { data } = await apiClient.post("/conversation", {
-        label: conversationName,
-        pdfMeta: selectedPDFs.map((pdf) => ({
-          id: pdf.id,
-        })),
-      });
-      setExistingPDFModalOpen(false);
-      navigate("/" + data.id);
-      message.success("Conversation renamed");
-    } catch (error: any) {
-      const msg = error.response?.data?.message || error.message || "Failed to create conversation";
-      message.error(msg);
-    } finally {
-      revalidateConversation();
-    }
-  };
-
-  const handleExistingPDFModalCancel = () => {
-    setExistingPDFModalOpen(false);
-  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -154,22 +104,25 @@ const SideBar = () => {
     if (!conversationExist && !loading) navigate("/");
   }, [pathname, loading]);
 
-  return (
-    <nav className="min-w-[260px] w-[260px] h-full bg-neutral-50">
-      <div className={styles.header}>
-        <img src="logo.png" alt="logo" className={styles.logo} />
-        <Typography.Text className={styles.title}>Chad PDF</Typography.Text>
-      </div>
-      <Button
-        color="primary"
-        variant="outlined"
-        onClick={onAddConversation}
-        className={styles.button}
-        icon={<PlusOutlined />}
-      >
+  const memoNewConversationButton = useMemo(
+    () => (
+      <Button className="w-full" color="primary" variant="outlined" icon={<PlusOutlined />}>
         New Conversation
       </Button>
-      <div className="overflow-y-auto flex-1 px-3">
+    ),
+    []
+  );
+
+  return (
+    <nav className="min-w-[260px] w-[260px] h-full flex flex-col bg-neutral-50">
+      <Link to="/" className={styles.header}>
+        <img src="logo.png" alt="logo" className={styles.logo} />
+        <Typography.Text className={styles.title}>Chad PDF</Typography.Text>
+      </Link>
+
+      <NewConversation className="px-3 mb-4">{memoNewConversationButton}</NewConversation>
+
+      <div className="overflow-y-auto flex-1 px-3 mb-12">
         {items.length === 0 ? (
           <div className="mt-6 text-center">
             <Typography.Text type="secondary">No conversations yet.</Typography.Text>
@@ -180,12 +133,14 @@ const SideBar = () => {
               {
                 key: "rename",
                 label: "Rename",
+                icon: <EditOutlined />,
                 onClick: () => handleRename(conv),
               },
               {
                 key: "delete",
                 label: "Delete",
                 danger: true,
+                icon: <DeleteOutlined />,
                 onClick: () => handleDelete(conv.key),
               },
             ];
@@ -237,27 +192,13 @@ const SideBar = () => {
                   </Typography.Text>
                 </div>
                 <Dropdown menu={{ items: dropdownItems }} trigger={["click"]}>
-                  <Button
-                    type="text"
-                    icon={<MoreOutlined className="text-gray-500 hover:text-black mt-1" />}
-                  />
+                  <Button type="text" icon={<MoreOutlined />} />
                 </Dropdown>
               </Link>
             );
           })
         )}
       </div>
-      <ExistingPDFModal
-        open={existingPDFModalOpen}
-        onOk={handleExistingPDFModalOk}
-        onCancel={handleExistingPDFModalCancel}
-        onUploadNew={handleUploadNewPDF}
-      />
-      <UploadPDFModal
-        open={uploadModalOpen}
-        onOk={handleUploadModalOk}
-        onCancel={handleUploadModalCancel}
-      />
     </nav>
   );
 };
