@@ -24,7 +24,7 @@ const defaultItems: Conversation[] = [];
 
 const initialState: ConversationState = {
   items: defaultItems,
-  loading: false,
+  loading: true,
   error: null,
 };
 

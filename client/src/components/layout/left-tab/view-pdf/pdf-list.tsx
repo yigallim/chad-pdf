@@ -66,7 +66,7 @@ const PDFList = ({ pdfMeta, onSelectPDF, onDeletePDF, onAddPDF }: PDFListProps) 
             color="primary"
             variant="dashed"
             onClick={onAddPDF}
-            className="flex flex-col items-center justify-center w-full bg-indigo-50!"
+            className="flex flex-col items-center justify-center w-full bg-neutral-50!"
             style={{
               height: 200 + 48,
             }}

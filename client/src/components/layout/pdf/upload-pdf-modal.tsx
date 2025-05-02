@@ -2,21 +2,21 @@ import { BASE_API_URL } from "@/service/api";
 import { InboxOutlined, DeleteOutlined, PaperClipOutlined } from "@ant-design/icons";
 import { Modal, Upload, Typography, Button, App, theme } from "antd";
 import type { UploadFile } from "antd";
+import { useEffect, useState } from "react";
 
 type UploadPDFModalProps = {
   open: boolean;
-  fileList: UploadFile[];
-  setFileList: (files: UploadFile[]) => void;
   onOk: () => void;
   onCancel: () => void;
 };
 
 const { Dragger } = Upload;
 
-const UploadPDFModal = ({ open, fileList, setFileList, onOk, onCancel }: UploadPDFModalProps) => {
+const UploadPDFModal = ({ open, onOk, onCancel }: UploadPDFModalProps) => {
   const { message } = App.useApp();
   const { useToken } = theme;
   const { token } = useToken();
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
 
   const uploadProps = {
     accept: ".pdf",
@@ -24,13 +24,22 @@ const UploadPDFModal = ({ open, fileList, setFileList, onOk, onCancel }: UploadP
     multiple: true,
     action: BASE_API_URL + "/pdf",
     onChange(info: { file: UploadFile; fileList: UploadFile[] }) {
-      const { status } = info.file;
-      if (status === "done") {
-        message.success(`${info.file.name} uploaded successfully.`);
+      const { status, response, uid, name } = info.file;
+
+      if (status === "uploading") {
+        setFileList(info.fileList);
+      } else if (status === "done") {
+        if (response?.existed) {
+          message.warning(`${name} already exists and was not added again.`);
+          setFileList((prev) => prev.filter((file) => file.uid !== uid));
+        } else {
+          message.success(`${name} uploaded successfully.`);
+          setFileList(info.fileList);
+        }
       } else if (status === "error") {
-        message.error(`${info.file.name} upload failed.`);
+        message.error(`${name} upload failed.`);
+        setFileList(info.fileList);
       }
-      setFileList(info.fileList);
     },
     showUploadList: false,
     fileList,
@@ -42,15 +51,17 @@ const UploadPDFModal = ({ open, fileList, setFileList, onOk, onCancel }: UploadP
 
   const uploadedCount = fileList.filter((f) => f.status === "done").length;
 
+  useEffect(() => {
+    if (fileList.length !== 0) setFileList([]);
+  }, [open]);
+
   return (
     <Modal
       centered
       title="Upload New PDF"
       open={open}
       onOk={onOk}
-      onCancel={() => {
-        onCancel();
-      }}
+      onCancel={onCancel}
       destroyOnClose
       width={600}
       okText="Done"

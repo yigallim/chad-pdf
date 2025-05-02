@@ -9,13 +9,17 @@ import {
 } from "@/store/slices/conversation-slice";
 import { createSelector } from "@reduxjs/toolkit";
 
-const selectConversationItems = createSelector(
-  (state: RootState) => state.conversation.items,
-  (items) => ({ items })
+const selectConversationState = createSelector(
+  (state: RootState) => state.conversation,
+  (conversation) => ({
+    items: conversation.items,
+    loading: conversation.loading,
+    error: conversation.error,
+  })
 );
 
 export const useConversationValue = () => {
-  return useSelector(selectConversationItems);
+  return useSelector(selectConversationState);
 };
 
 export const useConversationActions = () => {

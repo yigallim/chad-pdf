@@ -6,47 +6,42 @@ import PDFList from "./pdf-list";
 import PDFViewer from "./pdf-viewer";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
-import { Button, Empty, Typography } from "antd";
-import ExistingPDFModal, { PDFItem } from "@/components/layout/conversation/existing-pdf-modal";
-import UploadPDFModal from "@/components/layout/conversation/upload-pdf-modal";
-import type { UploadFile } from "antd";
+import { App, Button, Empty, Typography } from "antd";
+import ExistingPDFModal, { PDFItem } from "@/components/layout/pdf/existing-pdf-modal";
+import UploadPDFModal from "@/components/layout/pdf/upload-pdf-modal";
 
 const maxWidth = 800;
 
 const ViewPDF = () => {
   let { pathname } = useLocation();
   let path = pathname.slice(1);
+  const { message } = App.useApp();
   const { items } = useConversationValue();
   const { revalidateConversation } = useConversationActions();
   const [selectedPDF, setSelectedPDF] = useState<number | null>(null);
   const [addPDFModalOpen, setAddPDFModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [fileList, setFileList] = useState<UploadFile[]>([]);
 
   const currentConversation = items.find((item) => item.key === path);
   const pdfMeta = currentConversation == undefined ? [] : currentConversation.pdfMeta;
 
   const handleDeletePDF = async (pdfId: string) => {
     if (!currentConversation) return;
-
     const updatedMeta = currentConversation.pdfMeta.filter((pdf) => pdf.id !== pdfId);
-
     try {
       await apiClient.patch("/conversation", {
         id: currentConversation.key,
         pdfMeta: updatedMeta.map((pdf) => ({ id: pdf.id })),
       });
-      revalidateConversation();
+      message.success("PDF removed from conversation");
     } catch (error: any) {
       const msg =
         error.response?.data?.message || error.message || "Failed to delete PDF from conversation";
-      alert(msg);
+      message.error(msg);
+    } finally {
+      revalidateConversation();
     }
   };
-
-  useEffect(() => {
-    setSelectedPDF(null);
-  }, [path]);
 
   const handleAddPDFs = async (selectedPDFs: PDFItem[]) => {
     if (!currentConversation) return;
@@ -65,19 +60,22 @@ const ViewPDF = () => {
           ...newPDFs.map((pdf) => ({ id: pdf.id })),
         ],
       });
-      revalidateConversation();
       setAddPDFModalOpen(false);
+      message.success(
+        `${newPDFs.length} PDF${newPDFs.length > 1 ? "s" : ""} added to conversation`
+      );
     } catch (error: any) {
       const msg =
         error.response?.data?.message || error.message || "Failed to add PDF to conversation";
-      alert(msg);
+      message.error(msg);
+    } finally {
+      revalidateConversation();
     }
   };
 
   const handleUploadNewPDF = () => {
     setAddPDFModalOpen(false);
     setUploadModalOpen(true);
-    setFileList([]);
   };
 
   const handleUploadModalOk = () => {
@@ -89,6 +87,12 @@ const ViewPDF = () => {
     setUploadModalOpen(false);
     setAddPDFModalOpen(true);
   };
+
+  useEffect(() => {
+    if (selectedPDF !== null) {
+      setSelectedPDF(null);
+    }
+  }, [path]);
 
   if (pdfMeta.length == 0) {
     return (
@@ -109,8 +113,6 @@ const ViewPDF = () => {
           />
           <UploadPDFModal
             open={uploadModalOpen}
-            fileList={fileList}
-            setFileList={setFileList}
             onOk={handleUploadModalOk}
             onCancel={handleUploadModalCancel}
           />
@@ -138,8 +140,6 @@ const ViewPDF = () => {
         />
         <UploadPDFModal
           open={uploadModalOpen}
-          fileList={fileList}
-          setFileList={setFileList}
           onOk={handleUploadModalOk}
           onCancel={handleUploadModalCancel}
         />
