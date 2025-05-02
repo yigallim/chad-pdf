@@ -11,11 +11,11 @@ import {
   Card,
   CheckboxChangeEvent,
 } from "antd";
-import { DeleteOutlined } from "@ant-design/icons";
 import { Document, Page } from "react-pdf";
-import { withPdfPath } from "@/libs/utils";
+import { cn, withPdfPath } from "@/libs/utils";
 import options from "@/libs/pdf-constant";
 import apiClient from "@/service/api";
+import ConfirmDeleteButton from "@/components/ui/confirm-delete";
 
 export type PDFItem = {
   id: string;
@@ -24,9 +24,11 @@ export type PDFItem = {
 
 type ExistingPDFModalProps = {
   open: boolean;
-  onOk: (selectedPDFs: PDFItem[], conversationName: string) => void;
+  onOk: (selectedPDFs: PDFItem[], conversationName?: string) => Promise<void>;
   onCancel: () => void;
   onUploadNew: () => void;
+  disabledPDFIds?: string[];
+  mode?: "create" | "add";
 };
 
 export default function ExistingPDFModal({
@@ -34,7 +36,10 @@ export default function ExistingPDFModal({
   onOk,
   onCancel,
   onUploadNew,
+  disabledPDFIds = [],
+  mode = "create",
 }: ExistingPDFModalProps) {
+  const isCreateMode = mode == "create";
   const { message } = App.useApp();
   const [form] = Form.useForm<{ selectedPDFIds: string[]; conversationName: string }>();
   const [loading, setLoading] = useState(false);
@@ -81,7 +86,11 @@ export default function ExistingPDFModal({
     conversationName: string;
   }) => {
     const selected = pdfs.filter((pdf) => selectedPDFIds.includes(pdf.id));
-    onOk(selected, conversationName.trim());
+    if (isCreateMode) {
+      onOk(selected, conversationName.trim());
+    } else {
+      onOk(selected);
+    }
     form.resetFields();
   };
 
@@ -108,7 +117,7 @@ export default function ExistingPDFModal({
   return (
     <Modal
       centered
-      title="Select PDFs to Start Conversation"
+      title={isCreateMode ? "Select PDFs to Start Conversation" : "Add PDFs to Conversation"}
       open={open}
       onCancel={handleCancel}
       destroyOnClose
@@ -122,7 +131,7 @@ export default function ExistingPDFModal({
           Cancel
         </Button>,
         <Button key="submit" type="primary" htmlType="submit" form="existingPdfForm">
-          Create Conversation
+          {isCreateMode ? "Create Conversation" : "Update Conversation"}
         </Button>,
       ]}
     >
@@ -133,17 +142,18 @@ export default function ExistingPDFModal({
         onFinish={handleFinish}
         initialValues={{ conversationName: "", selectedPDFIds: [] }}
       >
-        <Form.Item
-          name="conversationName"
-          label="Conversation Name:"
-          rules={[
-            { required: true, message: "Please enter a conversation name" },
-            { min: 1, max: 30, message: "Name must be 1-30 characters" },
-          ]}
-        >
-          <Input placeholder="Eg. NLP Research" maxLength={30} allowClear />
-        </Form.Item>
-
+        {isCreateMode && (
+          <Form.Item
+            name="conversationName"
+            label="Conversation Name:"
+            rules={[
+              { required: true, message: "Please enter a conversation name" },
+              { min: 1, max: 30, message: "Name must be 1-30 characters" },
+            ]}
+          >
+            <Input placeholder="Eg. NLP Research" maxLength={30} allowClear />
+          </Form.Item>
+        )}
         <div className="mb-2">
           <div className="flex justify-between items-center mb-2">
             <Typography.Title level={5} className="mb-0">
@@ -158,7 +168,6 @@ export default function ExistingPDFModal({
               Select All
             </Checkbox>
           </div>
-
           <Form.Item
             name="selectedPDFIds"
             rules={[
@@ -171,7 +180,6 @@ export default function ExistingPDFModal({
             ]}
           >
             <div>
-              {" "}
               <div className="max-h-[380px] overflow-y-auto border border-neutral-200 rounded-md p-2">
                 {loading ? (
                   <div className="flex justify-center py-10">
@@ -183,78 +191,76 @@ export default function ExistingPDFModal({
                   </Typography.Text>
                 ) : (
                   <div className="flex flex-wrap gap-3 p-2">
-                    {pdfs.map((pdf) => (
-                      <div
-                        key={pdf.id}
-                        className="w-1/3 max-w-1/3"
-                        style={{ width: "calc(33.33% - 12px)" }}
-                      >
-                        <Card
-                          hoverable
-                          onClick={() => togglePDFSelection(pdf.id)}
-                          className="overflow-hidden"
-                          styles={{ body: { padding: "8px 16px" } }}
-                          cover={
-                            <div
-                              style={{
-                                height: 160,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                background: "#fafafa",
-                              }}
-                            >
-                              <Document
-                                file={withPdfPath(pdf.id)}
-                                options={options}
-                                loading={<Spin />}
-                                error={
-                                  <Typography.Text type="danger">
-                                    Failed to load PDF
-                                  </Typography.Text>
-                                }
-                              >
-                                <Page
-                                  pageNumber={1}
-                                  height={150}
-                                  renderTextLayer={false}
-                                  renderAnnotationLayer={false}
-                                />
-                              </Document>
-                              <Checkbox
-                                className="absolute top-2 right-2 z-10"
-                                checked={selectedPDFIds.includes(pdf.id)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  togglePDFSelection(pdf.id);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            </div>
-                          }
+                    {pdfs.map((pdf) => {
+                      const disabled = disabledPDFIds.includes(pdf.id);
+                      return (
+                        <div
+                          key={pdf.id}
+                          className="w-1/3 max-w-1/3"
+                          style={{ width: "calc(33.33% - 12px)" }}
                         >
-                          <Card.Meta
-                            title={
-                              <div className="flex justify-between items-center">
-                                <Typography.Text className="truncate block" title={pdf.filename}>
-                                  {pdf.filename}
-                                </Typography.Text>
-                                <Button
-                                  danger
-                                  type="dashed"
-                                  size="small"
-                                  icon={<DeleteOutlined />}
-                                  onClick={(e) => {
+                          <Card
+                            hoverable={!disabled}
+                            onClick={() => !disabled && togglePDFSelection(pdf.id)}
+                            className={cn(
+                              "overflow-hidden",
+                              disabled && "opacity-50 pointer-events-none"
+                            )}
+                            styles={{ body: { padding: "8px 16px" } }}
+                            cover={
+                              <div
+                                style={{
+                                  height: 160,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  background: "#fafafa",
+                                }}
+                              >
+                                <Document
+                                  file={withPdfPath(pdf.id)}
+                                  options={options}
+                                  loading={<Spin />}
+                                  error={
+                                    <Typography.Text type="danger">
+                                      Failed to load PDF
+                                    </Typography.Text>
+                                  }
+                                >
+                                  <Page
+                                    pageNumber={1}
+                                    height={150}
+                                    renderTextLayer={false}
+                                    renderAnnotationLayer={false}
+                                  />
+                                </Document>
+                                <Checkbox
+                                  className="absolute top-2 right-2 z-10"
+                                  checked={selectedPDFIds.includes(pdf.id)}
+                                  disabled={disabled}
+                                  onChange={(e) => {
                                     e.stopPropagation();
-                                    handleDeletePDF(pdf.id);
+                                    if (!disabled) togglePDFSelection(pdf.id);
                                   }}
+                                  onClick={(e) => e.stopPropagation()}
                                 />
                               </div>
                             }
-                          />
-                        </Card>
-                      </div>
-                    ))}
+                          >
+                            <div className="flex justify-between items-center">
+                              <Typography.Text className="truncate block" title={pdf.filename}>
+                                {pdf.filename}
+                              </Typography.Text>
+                              <ConfirmDeleteButton
+                                size="small"
+                                stopPropagation
+                                onConfirm={() => handleDeletePDF(pdf.id)}
+                              />
+                            </div>
+                          </Card>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

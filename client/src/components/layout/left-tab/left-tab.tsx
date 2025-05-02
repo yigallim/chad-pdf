@@ -23,7 +23,6 @@ const LeftTab = () => {
         onChange={setCurrentTab}
         className="z-10 absolute top-4 left-1/2 -translate-x-1/2 shadow-md"
       />
-
       {currentTab === "pdf" && <ViewPDF />}
       {currentTab === "relation" && <DocumentGraph className="w-full h-full" />}
       {currentTab === "sentiment" && <SentimentAnalysis />}

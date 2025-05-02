@@ -1,3 +1,4 @@
+import { BASE_API_URL } from "@/service/api";
 import { InboxOutlined, DeleteOutlined, PaperClipOutlined } from "@ant-design/icons";
 import { Modal, Upload, Typography, Button, App, theme } from "antd";
 import type { UploadFile } from "antd";
@@ -21,7 +22,7 @@ const UploadPDFModal = ({ open, fileList, setFileList, onOk, onCancel }: UploadP
     accept: ".pdf",
     name: "file",
     multiple: true,
-    action: "http://127.0.0.1:5000/api/pdf",
+    action: BASE_API_URL + "/pdf",
     onChange(info: { file: UploadFile; fileList: UploadFile[] }) {
       const { status } = info.file;
       if (status === "done") {
@@ -43,6 +44,7 @@ const UploadPDFModal = ({ open, fileList, setFileList, onOk, onCancel }: UploadP
 
   return (
     <Modal
+      centered
       title="Upload New PDF"
       open={open}
       onOk={onOk}
@@ -50,26 +52,28 @@ const UploadPDFModal = ({ open, fileList, setFileList, onOk, onCancel }: UploadP
         onCancel();
       }}
       destroyOnClose
-      width={500}
+      width={600}
       okText="Done"
       cancelText="Cancel"
       okButtonProps={{ disabled: uploadedCount === 0 }}
     >
       <div className="py-4 space-y-4">
         <Dragger {...uploadProps}>
-          <p className="ant-upload-drag-icon">
-            <InboxOutlined />
-          </p>
-          <p className="ant-upload-text">Click or drag PDF file to this area to upload</p>
-          <p className="ant-upload-hint">
-            Support for single or bulk upload. Strictly prohibited from uploading sensitive data.
-          </p>
+          <div className="my-6">
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p className="ant-upload-text">Click or drag PDF file to this area to upload</p>
+            <p className="ant-upload-hint">
+              Support for single or bulk upload. Strictly prohibited from uploading sensitive data.
+            </p>
+          </div>
         </Dragger>
 
         {fileList.length > 0 && (
           <div className="mt-4">
             <Typography.Title level={5}>Uploaded PDFs:</Typography.Title>
-            <ul className="list-inside">
+            <ul className="list-inside max-h-[300px] overflow-auto p-2 border-neutral-200 border rounded-xl">
               {fileList
                 .filter((file) => file.status === "done" || file.status === "error")
                 .map((file) => {
@@ -80,7 +84,6 @@ const UploadPDFModal = ({ open, fileList, setFileList, onOk, onCancel }: UploadP
                     : isError
                     ? token.colorError
                     : undefined;
-
                   return (
                     <li className="flex items-center" key={file.uid}>
                       <PaperClipOutlined className="mr-2" style={{ color: iconColor }} />

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useEffect, useState } from "react";
 import { Document, Page } from "react-pdf";
-import { Button, Spin } from "antd";
+import { Button, Spin, Typography } from "antd";
 import { LogoutOutlined } from "@ant-design/icons";
 import { cn, withPdfPath } from "@/libs/utils";
 import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -123,7 +123,7 @@ const PDFViewer = ({ pdfId, filename, onBack, maxWidth }: PDFViewerProps) => {
           }
           error={
             <div className="absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2">
-              Failed to Load PDF
+              <Typography.Text type="danger">Failed to load PDF</Typography.Text>
             </div>
           }
         >

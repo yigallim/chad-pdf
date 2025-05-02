@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { PlusOutlined, MoreOutlined } from "@ant-design/icons";
-import { App, Button, Typography, Dropdown, MenuProps, Input } from "antd";
+import { PlusOutlined, MoreOutlined, FilePdfOutlined } from "@ant-design/icons";
+import { App, Button, Typography, Dropdown, MenuProps, Input, Divider } from "antd";
 import { createStyles } from "antd-style";
 import { useConversationActions, useConversationValue } from "@/hooks/use-conversation";
 import type { UploadFile } from "antd";
@@ -90,7 +90,7 @@ const SideBar = () => {
     setExistingPDFModalOpen(true);
   };
 
-  const handleExistingPDFModalOk = async (selectedPDFs: PDFItem[], conversationName: string) => {
+  const handleExistingPDFModalOk = async (selectedPDFs: PDFItem[], conversationName?: string) => {
     if (selectedPDFs.length <= 0) return;
 
     try {
@@ -196,10 +196,10 @@ const SideBar = () => {
                 key={conv.key}
                 className={cn(
                   conv.key === path ? "bg-neutral-200!" : "hover:bg-neutral-100!",
-                  "mb-1 py-1.5 pl-4 pr-1 rounded-lg cursor-pointer duration-300 flex justify-between items-center"
+                  "relative mb-1 py-1.5 pl-4 pr-1 rounded-lg cursor-pointer transition-all! duration-300! flex justify-between items-end"
                 )}
               >
-                <div>
+                <div className="w-full">
                   {editingId === conv.key ? (
                     <Input
                       value={editingValue}
@@ -224,6 +224,14 @@ const SideBar = () => {
                       {conv.label}
                     </Typography.Text>
                   )}
+                  <Typography.Text
+                    type={conv.pdfMeta.length == 0 ? "danger" : "secondary"}
+                    className="text-[13px]!"
+                  >
+                    <FilePdfOutlined className="mr-1" />
+                    {conv.pdfMeta.length}
+                  </Typography.Text>
+                  <Divider type="vertical" style={{}} />
                   <Typography.Text type="secondary" className="text-[13px]!">
                     {new Date(conv.createdAt * 1000).toLocaleString()}
                   </Typography.Text>
@@ -239,14 +247,12 @@ const SideBar = () => {
           })
         )}
       </div>
-
       <ExistingPDFModal
         open={existingPDFModalOpen}
         onOk={handleExistingPDFModalOk}
         onCancel={handleExistingPDFModalCancel}
         onUploadNew={handleUploadNewPDF}
       />
-
       <UploadPDFModal
         open={uploadModalOpen}
         fileList={fileList}

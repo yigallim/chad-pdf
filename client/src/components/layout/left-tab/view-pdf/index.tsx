@@ -7,6 +7,9 @@ import PDFViewer from "./pdf-viewer";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
 import { Button, Empty, Typography } from "antd";
+import ExistingPDFModal, { PDFItem } from "@/components/layout/conversation/existing-pdf-modal";
+import UploadPDFModal from "@/components/layout/conversation/upload-pdf-modal";
+import type { UploadFile } from "antd";
 
 const maxWidth = 800;
 
@@ -16,6 +19,9 @@ const ViewPDF = () => {
   const { items } = useConversationValue();
   const { revalidateConversation } = useConversationActions();
   const [selectedPDF, setSelectedPDF] = useState<number | null>(null);
+  const [addPDFModalOpen, setAddPDFModalOpen] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
 
   const currentConversation = items.find((item) => item.key === path);
   const pdfMeta = currentConversation == undefined ? [] : currentConversation.pdfMeta;
@@ -42,20 +48,103 @@ const ViewPDF = () => {
     setSelectedPDF(null);
   }, [path]);
 
+  const handleAddPDFs = async (selectedPDFs: PDFItem[]) => {
+    if (!currentConversation) return;
+    const newPDFs = selectedPDFs.filter(
+      (pdf) => !currentConversation.pdfMeta.some((meta) => meta.id === pdf.id)
+    );
+    if (newPDFs.length === 0) {
+      setAddPDFModalOpen(false);
+      return;
+    }
+    try {
+      await apiClient.patch("/conversation", {
+        id: currentConversation.key,
+        pdfMeta: [
+          ...currentConversation.pdfMeta.map((pdf) => ({ id: pdf.id })),
+          ...newPDFs.map((pdf) => ({ id: pdf.id })),
+        ],
+      });
+      revalidateConversation();
+      setAddPDFModalOpen(false);
+    } catch (error: any) {
+      const msg =
+        error.response?.data?.message || error.message || "Failed to add PDF to conversation";
+      alert(msg);
+    }
+  };
+
+  const handleUploadNewPDF = () => {
+    setAddPDFModalOpen(false);
+    setUploadModalOpen(true);
+    setFileList([]);
+  };
+
+  const handleUploadModalOk = () => {
+    setUploadModalOpen(false);
+    setAddPDFModalOpen(true);
+  };
+
+  const handleUploadModalCancel = () => {
+    setUploadModalOpen(false);
+    setAddPDFModalOpen(true);
+  };
+
   if (pdfMeta.length == 0) {
     return (
       <div className="w-full h-full grid place-content-center">
         <Empty
           description={<Typography.Text>No Existing PDF in This Conversation</Typography.Text>}
         >
-          <Button type="primary">Upload Now</Button>
+          <Button type="primary" onClick={() => setAddPDFModalOpen(true)}>
+            Add PDF
+          </Button>
+          <ExistingPDFModal
+            open={addPDFModalOpen}
+            onOk={handleAddPDFs}
+            onCancel={() => setAddPDFModalOpen(false)}
+            onUploadNew={handleUploadNewPDF}
+            disabledPDFIds={pdfMeta.map((pdf) => pdf.id)}
+            mode="add"
+          />
+          <UploadPDFModal
+            open={uploadModalOpen}
+            fileList={fileList}
+            setFileList={setFileList}
+            onOk={handleUploadModalOk}
+            onCancel={handleUploadModalCancel}
+          />
         </Empty>
       </div>
     );
   }
 
   if (selectedPDF === null) {
-    return <PDFList pdfMeta={pdfMeta} onSelectPDF={setSelectedPDF} onDeletePDF={handleDeletePDF} />;
+    return (
+      <>
+        <PDFList
+          pdfMeta={pdfMeta}
+          onSelectPDF={setSelectedPDF}
+          onDeletePDF={handleDeletePDF}
+          onAddPDF={() => setAddPDFModalOpen(true)}
+        />
+        <ExistingPDFModal
+          open={addPDFModalOpen}
+          onOk={handleAddPDFs}
+          onCancel={() => setAddPDFModalOpen(false)}
+          onUploadNew={handleUploadNewPDF}
+          disabledPDFIds={pdfMeta.map((pdf) => pdf.id)}
+          mode="add"
+        />
+        <UploadPDFModal
+          open={uploadModalOpen}
+          fileList={fileList}
+          setFileList={setFileList}
+          onOk={handleUploadModalOk}
+          onCancel={handleUploadModalCancel}
+        />
+      </>
+    );
   }
 
   return (
