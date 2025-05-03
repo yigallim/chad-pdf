@@ -112,10 +112,27 @@ def compute_sentiment(text:str):
             sentiments.append(result[0])
     return _compute_weighted_sentiment(sentiments)
 
-def get_vectorstore(model_name:str, text_chunks:list[str]):
+def get_vectorstore(model_name:str, pdf_chunks:dict[str,list[str]]):
     embedding_model = HuggingFaceEmbeddings(model_name=model_name)
-    vectorstore = USearch.from_texts(text_chunks, embedding_model)
-    return vectorstore
+    all_texts=[]
+    all_ids=[]
+    
+    for pdf_id, chunks in pdf_chunks.items():
+        for i, chunk in enumerate(chunks):
+            unique_id = f"{pdf_id}_{i}"
+            all_texts.append(chunk)
+            all_ids.append(unique_id)
+            
+    vectorstore = USearch.from_texts(
+        texts=all_texts,
+        embedding=embedding_model,
+        ids=all_ids
+    )
+    
+    return vectorstore, all_ids
+
+def remove_chunks_from_vectorstore(vectorstore:USearch, ids):
+    vectorstore.delete(ids)
 
 def update_vectorstore(text_chunks,vectorstore):
     vectorstore.add_texts(text_chunks)

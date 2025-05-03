@@ -112,14 +112,17 @@ while True:
         if first_time:
             id = db.get_all_chat_id()[1]
             history, chat_name, relevant_pdfs = db.get_historical_chat(id)
+            
+            # in case they delete pdf
             found_pdf_paths=[]
             missing_pdf_paths=[]
-            for pdf in relevant_pdfs:
-                local_path = db.get_filepath_by_id(pdf)
-                if local_path:
-                    found_pdf_paths.append(local_path)
-                else:
-                    missing_pdf_paths.append(local_path)
+            if not relevant_pdfs:
+                for pdf in relevant_pdfs:
+                    local_path = db.get_filepath_by_id(pdf)
+                    if local_path:
+                        found_pdf_paths.append(local_path)
+                    else:
+                        missing_pdf_paths.append(local_path)
                     
             chat = gemini.create_chat(history=history)
             if not id:

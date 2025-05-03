@@ -65,12 +65,16 @@ def create_chat(chat_name:str):
         })
     return result.inserted_id
 
-def update_chat_history(chat_id:ObjectId,new_messages:list):
+def _get_chat(chat_id:ObjectId):
     chat = chat_history_collection.find_one({"_id": chat_id})
     
     if not chat:
         print(f"❌ Chat ('{chat_id}') not found in MongoDB.")
         raise ValueError(f"Chat with ID {chat_id} not found.")
+    return chat
+
+def update_chat_history(chat_id:ObjectId,new_messages:list):
+    chat = _get_chat(chat_id)
     
     existing_history = chat.get('chat_history',[])
     existing_history.extend(new_messages)
@@ -81,16 +85,50 @@ def update_chat_history(chat_id:ObjectId,new_messages:list):
     )
     print(f"✅ Chat history with chat id ('{chat_id}') updated.")
 
+def update_vectorstore(chat_id:ObjectId, vectorstore):
+    _get_chat(chat_id)
+    chat_history_collection.update_one(
+        {"_id": chat_id},
+        {"$set": {
+            "vectorstore": vectorstore
+            }
+         }
+    )
+    print(f"✅ Vectorstore with chat id ('{chat_id}') updated.")
+
+def update_vector_ids(chat_id:ObjectId, vector_ids):
+    _get_chat(chat_id)
+    chat_history_collection.update_one(
+        {"_id": chat_id},
+        {"$set": {
+            "vector_ids": vector_ids
+            }
+         }
+    )
+    print(f"✅ Vector IDs with chat id ('{chat_id}') updated.")
+    
+def update_chat_pdfs(chat_id:ObjectId, pdfs):
+    _get_chat(chat_id)
+    chat_history_collection.update_one(
+        {"_id": chat_id},
+        {"$set": {
+            "pdfs": pdfs
+            }
+         }
+    )
+    print(f"✅ PDFs with chat id ('{chat_id}') updated.")
+    
 def get_all_chat_id():
     chat_ids = chat_history_collection.find({}, {"_id": 1})
     return [id['_id'] for id in chat_ids]
 
 def get_historical_chat(chat_id:ObjectId):
-    chat = chat_history_collection.find_one({"_id": chat_id})
-    if not chat:
-        print(f"❌ Chat ('{chat_id}') not found in MongoDB.")
-        raise ValueError(f"Chat with ID {chat_id} not found.")
-    existing_history = chat.get('chat_history',[])
-    chat_name = chat.get('chat_name','')
-    relevant_pdfs = chat.get('pdfs',[])
-    return existing_history, chat_name, relevant_pdfs
+    chat = _get_chat(chat_id)
+    
+    existing_history = chat.get('chat_history',None)
+    chat_name = chat.get('chat_name',None)
+    relevant_pdfs = chat.get('pdfs',None)
+    vectorstore = chat.get('vectorstore',None)
+    vector_ids = chat.get('vector_ids',None)
+    return existing_history, chat_name, relevant_pdfs, vectorstore, vector_ids
+
