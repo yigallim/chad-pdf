@@ -8,7 +8,7 @@ from typing import Optional
 
 load_dotenv()
 
-GEMINI_TOKEN = os.getenv("GEMINI_API_KEY")
+GEMINI_TOKEN = os.getenv("GEMINI_API_KEY")[0]
 
 def create_chat(history: Optional[list] = None):
     client = genai.Client(api_key=GEMINI_TOKEN)

@@ -2,19 +2,23 @@ import hashlib
 from pymongo import MongoClient
 from bson import ObjectId
 import os
-from typing import Optional
+import pickle
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["chad_pdf"]
 pdf_files_collection = db["pdf_files"]
 chat_history_collection = db["chat_history"]
-pdf_folders_dir = "../pdf_folders"
+pdf_folders_dir = "./pdf_folders"
 
 # Compute SHA-256 hash of PDF content
 def _compute_pdf_hash(file_path):
     with open(file_path, "rb") as f:
         pdf_data = f.read()
         return hashlib.sha256(pdf_data).hexdigest(), pdf_data
+
+def get_all_pdf_id():
+    pdf_ids = pdf_files_collection.find({}, {"_id": 1})
+    return [id['_id'] for id in pdf_ids]
 
 # Store PDF if not already in DB
 def store_pdf_if_new(file_path):
@@ -23,7 +27,7 @@ def store_pdf_if_new(file_path):
     filename = os.path.basename(file_path)
     if existing:
         print(f"✅ PDF '{filename}' already exists in the database (hash matched).")
-        return False  # Already exists
+        return existing["_id"]  # Already exists
     else:
         result = pdf_files_collection.insert_one({
             "filename": filename,
@@ -36,7 +40,7 @@ def store_pdf_if_new(file_path):
             f.write(pdf_data)
 
         print(f"📥 Stored new PDF: '{filename}.pdf in pdf_folders/'")
-        return True  # New file stored
+        return result.inserted_id  # New file stored
     
 def get_filepath(file_path):
     filename = os.path.basename(file_path)
@@ -85,38 +89,27 @@ def update_chat_history(chat_id:ObjectId,new_messages:list):
     )
     print(f"✅ Chat history with chat id ('{chat_id}') updated.")
 
-def update_vectorstore(chat_id:ObjectId, vectorstore):
+def update_vectorstore_path(chat_id:ObjectId, vectorstore_path):
     _get_chat(chat_id)
     chat_history_collection.update_one(
         {"_id": chat_id},
         {"$set": {
-            "vectorstore": vectorstore
+            "vectorstore_path": vectorstore_path
             }
          }
     )
-    print(f"✅ Vectorstore with chat id ('{chat_id}') updated.")
-
-def update_vector_ids(chat_id:ObjectId, vector_ids):
-    _get_chat(chat_id)
-    chat_history_collection.update_one(
-        {"_id": chat_id},
-        {"$set": {
-            "vector_ids": vector_ids
-            }
-         }
-    )
-    print(f"✅ Vector IDs with chat id ('{chat_id}') updated.")
+    print(f"✅ Vectorstore path with chat id ('{chat_id}') updated.")
     
-def update_chat_pdfs(chat_id:ObjectId, pdfs):
+def update_chat_pdf_ids(chat_id:ObjectId, pdf_ids):
     _get_chat(chat_id)
     chat_history_collection.update_one(
         {"_id": chat_id},
         {"$set": {
-            "pdfs": pdfs
+            "pdf_ids": pdf_ids
             }
          }
     )
-    print(f"✅ PDFs with chat id ('{chat_id}') updated.")
+    print(f"✅ PDF IDs with chat id ('{chat_id}') updated.")
     
 def get_all_chat_id():
     chat_ids = chat_history_collection.find({}, {"_id": 1})
@@ -127,8 +120,6 @@ def get_historical_chat(chat_id:ObjectId):
     
     existing_history = chat.get('chat_history',None)
     chat_name = chat.get('chat_name',None)
-    relevant_pdfs = chat.get('pdfs',None)
-    vectorstore = chat.get('vectorstore',None)
-    vector_ids = chat.get('vector_ids',None)
-    return existing_history, chat_name, relevant_pdfs, vectorstore, vector_ids
-
+    pdf_ids = chat.get('pdf_ids',None)
+    vectorstore_path = chat.get('vectorstore_path',None) # USearch object
+    return existing_history, chat_name, pdf_ids, vectorstore_path

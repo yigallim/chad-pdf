@@ -30,7 +30,7 @@ def process_pdfs(pdf_list):
             model_name='all-MiniLM-L6-v2'
             chunks =  page_info['chunks']
             if global_vectorstore is None:
-                global_vectorstore = be.get_vectorstore(model_name,chunks)
+                global_vectorstore = be.get_vectorstore(model_name, pdf_id, chunks)
             else:
                 be.update_vectorstore(chunks, global_vectorstore)
             # conversation_chain = be.get_conversation_chain(vectorstore)

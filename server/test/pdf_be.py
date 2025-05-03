@@ -1,20 +1,23 @@
 # pip install google-genai
 # pip install dotenv
-import gemini
-import db_helper as db
 import text_processor as tp
+import db_helper as db
+import gemini
 import fitz
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
-from langchain_community.vectorstores import USearch
+from langchain_chroma import Chroma
+from langchain.schema.document import Document
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import pipeline, AutoTokenizer
 from nltk.tokenize import sent_tokenize
 import nltk
 from typing import Optional
+from bson import ObjectId
+import os
 
 def _safe_nltk_download(resource_path, download_name=None):
     try:
@@ -53,10 +56,10 @@ def get_text_chunks(text:str):
     chunks = text_splitter.split_text(text)
     return chunks
 
-def extract_information(file):
+def extract_information(file_path:str):
     pdf_info = []
-    content = get_pdf_content(file)
-    for page_num, text in enumerate(content):
+    content = get_pdf_content(file_path)
+    for page_num, text in enumerate(content,  start=1):
         chunks = get_text_chunks(text)
         pdf_info.append({"page":page_num,"chunks":chunks})
     return pdf_info
@@ -112,34 +115,55 @@ def compute_sentiment(text:str):
             sentiments.append(result[0])
     return _compute_weighted_sentiment(sentiments)
 
-def get_vectorstore(model_name:str, pdf_id:str,chunks:list[str]):
+def create_vectorstore(model_name:str, pdf_id:str,pdf_info:list[dict[str, list[str]]],chat_id:str):
+    persist_path = f"./chroma_store/{chat_id}"
+    
+    if os.path.exists(persist_path):
+        print(f"❌ Vectorstore exists. Try load_vectorstore().")
+        return None
+    
     embedding_model = HuggingFaceEmbeddings(model_name=model_name)
-    all_texts=[]
-    all_ids=[]
-    
-    for i, chunk in enumerate(chunks):
-        unique_id = f"{pdf_id}_{i}"
-        all_texts.append(chunk)
-        all_ids.append(unique_id)
-            
-    vectorstore = USearch.from_texts(
-        texts=all_texts,
+    docs=[]
+    for page_info in pdf_info:
+        docs=[Document(page_content=chunk, metadata={"pdf_id": pdf_id, "page_num":page_info["page"]}) for chunk in page_info["chunks"]]
+
+    vectorstore = Chroma.from_documents(
+        documents=docs,
         embedding=embedding_model,
-        ids=all_ids
+        persist_directory=persist_path
     )
+    return vectorstore
+
+def load_vectorstore(model_name:str, chat_id:str):
+    embedding_model = HuggingFaceEmbeddings(model_name=model_name)
+    vectorstore = Chroma(persist_directory=f"./chroma_store/{chat_id}", embedding_function=embedding_model)
+    return vectorstore
+
+def remove_pdf_from_vectorstore(vectorstore:Chroma, pdf_id:str):
+    vectorstore.delete(where={"pdf_id":pdf_id})
+
+def update_vectorstore(vectorstore:Chroma, pdf_id:str, pdf_info:list[dict[str, list[str]]]):
+    docs=[]
+    for page_info in pdf_info:
+        docs=[Document(page_content=chunk, metadata={"pdf_id": pdf_id, "page_num":page_info["page"]}) for chunk in page_info["chunks"]]
+    vectorstore.add_documents(docs)
+    return vectorstore
+
+def retrieve_relevant_docs(query:str, vectorstore:Chroma,top_k:int=3):
+    total_docs = vectorstore._collection.count()
+    k = min(top_k, total_docs)
+    results = vectorstore.similarity_search(query,k=k)
+    return [doc for doc in results]
+
+def get_chunks_by_docs(docs:Document):
+    return [doc.page_content for doc in docs]
     
-    return vectorstore, all_ids
+def get_page_nums_by_docs(docs:Document):
+    return [doc.metadata.get("page_num") for doc in docs]
 
-def remove_chunks_from_vectorstore(vectorstore:USearch, ids):
-    vectorstore.delete(ids)
-
-def update_vectorstore(text_chunks,vectorstore):
-    vectorstore.add_texts(text_chunks)
-
-def retrieve_relevant_chunks(query:str, vectorstore:USearch,top_k:int=3):
-    results = vectorstore.similarity_search(query,k=top_k)
-    return [doc.page_content for doc in results]
-
+def get_pdf_ids_by_docs(docs:Document):
+    return [doc.metadata.get("pdf_id") for doc in docs]
+    
 def get_query_with_context(query:str,relevant_chunks:list[str]):
     context = "\n\n".join(relevant_chunks)
     full_prompt = f"""Use the following context to answer the question.
@@ -179,3 +203,25 @@ def get_conversation_chain(llm, vectorstore):
 
 def ask_question(conversation_chain,question):
     return conversation_chain.run(question)
+
+
+def pdf_path_to_vectorstore(pdf_path:str,chat_id:ObjectId, embedding_model_name:Optional[str]=None, vectorstore:Optional[Chroma]=None):
+    pdf_info = extract_information(pdf_path)
+    pdf_id = str(db.store_pdf_if_new(pdf_path))
+    # Create a vectorstore
+    if not vectorstore:
+        if embedding_model_name and pdf_id:
+            vectorstore = create_vectorstore(embedding_model_name, pdf_id, pdf_info, str(chat_id))
+        else:
+            print("❌ Please specify chat_id and embedding_model_name.")
+            return None
+    else:
+        _, _, pdf_ids, _ = db.get_historical_chat(chat_id)
+        if not pdf_ids:
+                pdf_ids=[]
+        if pdf_id not in pdf_ids:
+            vectorstore = update_vectorstore(vectorstore=vectorstore, pdf_id=pdf_id, pdf_info=pdf_info)
+            pdf_ids.append(pdf_id)
+            db.update_chat_pdf_ids(chat_id, [pdf_id])
+    return vectorstore
+    
