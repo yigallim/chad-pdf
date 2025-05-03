@@ -226,25 +226,3 @@ def pdf_path_to_vectorstore(pdf_path:str,chat_id:ObjectId, embedding_model_name:
             pdf_ids.append(pdf_id)
             db.update_chat_pdf_ids(chat_id, pdf_ids)
     return vectorstore
-    
-pdf_paths = [
-    "C:/Users/Kang/Downloads/0802.4324v1.pdf",
-    "C:/Users/Kang/Downloads/2410.01151v1.pdf",
-    "C:/Users/Kang/Downloads/2406.03980v1.pdf",
-    "C:/Users/Kang/Downloads/2504.13884v1.pdf",
-    "C:/Users/Kang/Downloads/2304.00468v2.pdf"
-    ]
-
-chat_id = db.create_chat("testing")
-embedding_model_name = "sentence-transformers/all-MiniLM-L6-v2"
-vectorstore = None
-for path in pdf_paths:
-    vectorstore = pdf_path_to_vectorstore(path, chat_id,embedding_model_name=embedding_model_name, vectorstore=vectorstore)
-
-query = "Natural Language Processing"
-retrieved_docs = retrieve_relevant_docs(query, vectorstore)
-
-for doc in retrieved_docs:
-    print("Chunk:", doc.page_content)
-    print("Page Num:", doc.metadata.get("page_num"))
-    print("PDF ID:", doc.metadata.get("pdf_id"))
