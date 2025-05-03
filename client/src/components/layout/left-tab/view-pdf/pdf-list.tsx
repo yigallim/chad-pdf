@@ -1,4 +1,4 @@
-import { Card, Row, Col, Typography, Spin, Button } from "antd";
+import { Card, Typography, Spin, Button, Tag } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { Document, Page } from "react-pdf";
 import { PDFMeta } from "@/store/slices/conversation-slice";
@@ -11,14 +11,34 @@ type PDFListProps = {
   onSelectPDF: (index: number) => void;
   onDeletePDF: (pdfId: string) => void;
   onAddPDF: () => void;
+  pdfCount: number;
+  totalWords: number;
 };
 
-const PDFList = ({ pdfMeta, onSelectPDF, onDeletePDF, onAddPDF }: PDFListProps) => {
+const PDFList = ({
+  pdfMeta,
+  onSelectPDF,
+  onDeletePDF,
+  onAddPDF,
+  pdfCount,
+  totalWords,
+}: PDFListProps) => {
   return (
     <div className="p-8 pt-20 h-full overflow-auto">
-      <Row gutter={[24, 24]}>
+      <div style={{ marginBottom: 16 }}>
+        <Typography.Text type="secondary">
+          PDFs: {pdfCount} | Total words: {totalWords}
+        </Typography.Text>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gap: "16px",
+          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+        }}
+      >
         {pdfMeta.map((pdf, idx) => (
-          <Col key={pdf.id} span={24} lg={12} xxl={8}>
+          <div key={pdf.id}>
             <Card
               hoverable
               className="overflow-hidden"
@@ -37,8 +57,22 @@ const PDFList = ({ pdfMeta, onSelectPDF, onDeletePDF, onAddPDF }: PDFListProps) 
                     alignItems: "center",
                     justifyContent: "center",
                     background: "#fafafa",
+                    position: "relative",
                   }}
                 >
+                  {pdf.word_count === -1 ? (
+                    <Tag
+                      className="absolute! top-2 left-2 z-10"
+                      color="default"
+                      style={{ opacity: 0.7 }}
+                    >
+                      Processing...
+                    </Tag>
+                  ) : (
+                    <Tag className="absolute! top-2 left-2 z-10" color="blue">
+                      {pdf.word_count} words
+                    </Tag>
+                  )}
                   <Document
                     file={withPdfPath(pdf.id)}
                     loading={<Spin size="large" />}
@@ -59,9 +93,9 @@ const PDFList = ({ pdfMeta, onSelectPDF, onDeletePDF, onAddPDF }: PDFListProps) 
                 <ConfirmDeleteButton onConfirm={() => onDeletePDF(pdf.id)} stopPropagation />
               </div>
             </Card>
-          </Col>
+          </div>
         ))}
-        <Col key="add-pdf" span={24} lg={12} xxl={8}>
+        <div key="add-pdf">
           <Button
             color="primary"
             variant="dashed"
@@ -74,8 +108,8 @@ const PDFList = ({ pdfMeta, onSelectPDF, onDeletePDF, onAddPDF }: PDFListProps) 
             <PlusOutlined style={{ fontSize: 32 }} />
             Add PDF
           </Button>
-        </Col>
-      </Row>
+        </div>
+      </div>
     </div>
   );
 };

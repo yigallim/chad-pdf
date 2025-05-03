@@ -4,6 +4,9 @@ from app.utils.response import clean_res
 import time
 from bson import ObjectId
 
+MAX_WORDS = 50000
+MAX_PDFS = 20
+
 conversation_bp = Blueprint('conversation', __name__)
 
 @conversation_bp.route("/conversation", methods=["GET"])
@@ -12,8 +15,14 @@ def get_conversations():
     for conv in conversations:
         if 'pdfMeta' in conv and isinstance(conv['pdfMeta'], list):
             for meta in conv['pdfMeta']:
-                pdf_doc = mongo.db.pdf_files.find_one({'_id': ObjectId(meta['id'])})
-                meta['filename'] = pdf_doc['filename'] if pdf_doc and 'filename' in pdf_doc else None
+                try:
+                    pdf_doc = mongo.db.pdf_files.find_one({'_id': ObjectId(meta['id'])})
+                    if pdf_doc:
+                        meta['filename'] = pdf_doc.get('filename')
+                        meta['word_count'] = pdf_doc.get('word_count', -1)
+                except Exception:
+                    meta['filename'] = None
+                    meta['word_count'] = -1
     cleaned = clean_res(conversations)
     return jsonify(cleaned), 200
 
@@ -33,18 +42,37 @@ def create_conversation():
         if not isinstance(item, dict) or 'id' not in item:
             return jsonify({'error': 'Each pdfMeta item must contain an id'}), 400
 
-    cleaned_meta = [{'id': item['id']} for item in pdf_meta]
+    if len(pdf_meta) > MAX_PDFS:
+        return jsonify({
+            'error': f'You may attach at most {MAX_PDFS} PDFs per conversation.'
+        }), 400
+
+    cleaned_meta = []
+    total_words  = 0
+    for item in pdf_meta:
+        pid = item['id']
+        doc = mongo.db.pdf_files.find_one({'_id': ObjectId(pid)}, {'word_count': 1})
+        wc  = doc.get('word_count', 0) if doc else 0
+        total_words += max(wc, 0)
+        cleaned_meta.append({'id': pid})
+
+    if total_words > MAX_WORDS:
+        return jsonify({
+            'error': (
+                f'The combined word count of your PDFs is {total_words}, '
+                f'which exceeds the limit of {MAX_WORDS}.'
+            )
+        }), 400
+
     conversation_doc = {
-        'label': label,
-        'pdfMeta': pdf_meta,
+        'label':    label,
+        'pdfMeta':  cleaned_meta,
+        'history':  [],
         'createdAt': int(time.time())
     }
-
     result = mongo.db.conversations.insert_one(conversation_doc)
     conversation_doc['id'] = str(result.inserted_id)
-    clean = clean_res(conversation_doc)
-
-    return jsonify(clean), 201
+    return jsonify(clean_res(conversation_doc)), 201
 
 @conversation_bp.route("/conversation", methods=["DELETE"])
 def delete_conversation():
@@ -75,9 +103,32 @@ def update_conversation():
     if 'pdfMeta' in data:
         if not isinstance(data['pdfMeta'], list):
             return jsonify({'error': 'pdfMeta must be a list'}), 400
+
         for item in data['pdfMeta']:
             if not isinstance(item, dict) or 'id' not in item:
                 return jsonify({'error': 'Each pdfMeta item must contain an id'}), 400
+
+        # 2) enforce PDF‐count limit
+        if len(data['pdfMeta']) > MAX_PDFS:
+            return jsonify({
+                'error': f'You may attach at most {MAX_PDFS} PDFs per conversation.'
+            }), 400
+
+        total_words = 0
+        for item in data['pdfMeta']:
+            pid = item['id']
+            doc = mongo.db.pdf_files.find_one({'_id': ObjectId(pid)}, {'word_count': 1})
+            wc  = doc.get('word_count', 0) if doc else 0
+            total_words += max(wc, 0)
+
+        if total_words > MAX_WORDS:
+            return jsonify({
+                'error': (
+                    f'The combined word count of your PDFs is {total_words}, '
+                    f'which exceeds the limit of {MAX_WORDS}.'
+                )
+            }), 400
+
         update_fields['pdfMeta'] = data['pdfMeta']
 
     if not update_fields:
@@ -88,7 +139,7 @@ def update_conversation():
             {'_id': ObjectId(data['id'])},
             {'$set': update_fields}
         )
-    except Exception as e:
+    except Exception:
         return jsonify({'error': 'Invalid id format'}), 400
 
     if result.matched_count == 0:

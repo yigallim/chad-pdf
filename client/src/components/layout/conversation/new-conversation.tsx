@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { App } from "antd";
 import apiClient from "@/service/api";
 import { useConversationActions } from "@/hooks/use-conversation";
-import ExistingPDFModal, { PDFItem } from "../pdf/existing-pdf-modal";
+import ExistingPDFModal from "../pdf/existing-pdf-modal";
 import UploadPDFModal from "../pdf/upload-pdf-modal";
+import { PDFMeta } from "@/store/slices/conversation-slice";
 
 type NewConversationProps = {
   children: ReactNode;
@@ -39,7 +40,7 @@ const NewConversation = memo(({ children, className, style }: NewConversationPro
   }, []);
 
   const handleExistingPDFModalOk = useCallback(
-    async (selectedPDFs: PDFItem[], conversationName?: string) => {
+    async (selectedPDFs: PDFMeta[], conversationName?: string) => {
       if (selectedPDFs.length <= 0) return;
 
       try {
@@ -53,8 +54,7 @@ const NewConversation = memo(({ children, className, style }: NewConversationPro
         navigate("/" + data.id);
         message.success("Conversation created");
       } catch (error: any) {
-        const msg =
-          error.response?.data?.message || error.message || "Failed to create conversation";
+        const msg = error.response?.data?.error || error.message || "Failed to create conversation";
         message.error(msg);
       } finally {
         revalidateConversation();

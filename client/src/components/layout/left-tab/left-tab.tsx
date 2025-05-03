@@ -10,7 +10,7 @@ type Tab = "pdf" | "relation" | "sentiment";
 const LeftTab = () => {
   const [currentTab, setCurrentTab] = useState<Tab>("pdf");
   return (
-    <div className="flex-1 min-w-0 h-full relative overflow-x-hidden">
+    <div className="min-w-0 h-full relative overflow-x-hidden">
       <Segmented
         options={[
           { label: "View PDF", value: "pdf", icon: <FilePdfOutlined /> },

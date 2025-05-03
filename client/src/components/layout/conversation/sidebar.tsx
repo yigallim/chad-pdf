@@ -59,7 +59,7 @@ const SideBar = () => {
       message.success("Conversation deleted");
       navigate("/");
     } catch (error: any) {
-      const msg = error.response?.data?.message || error.message || "Failed to delete conversation";
+      const msg = error.response?.data?.error || error.message || "Failed to delete conversation";
       message.error(msg);
     } finally {
       revalidateConversation();
@@ -67,7 +67,7 @@ const SideBar = () => {
   };
 
   const handleRename = (conv: Conversation) => {
-    setEditingId(conv.key);
+    setEditingId(conv.id);
     setEditingValue(conv.label);
   };
 
@@ -75,7 +75,7 @@ const SideBar = () => {
     if (!editingId) return;
 
     const newLabel = editingValue.trim();
-    const original = items.find((item) => item.key === editingId);
+    const original = items.find((item) => item.id === editingId);
     if (!newLabel || newLabel === original?.label) {
       setEditingId(null);
       setEditingValue("");
@@ -86,7 +86,7 @@ const SideBar = () => {
       await apiClient.patch("/conversation", { id: editingId, label: newLabel });
       message.success("Conversation renamed");
     } catch (error: any) {
-      const msg = error.response?.data?.message || error.message || "Failed to rename";
+      const msg = error.response?.data?.error || error.message || "Failed to rename";
       message.error(msg);
     } finally {
       setEditingId(null);
@@ -100,7 +100,7 @@ const SideBar = () => {
   }, []);
 
   useEffect(() => {
-    const conversationExist = items.find((item) => item.key === path);
+    const conversationExist = items.find((item) => item.id === path);
     if (!conversationExist && !loading) navigate("/");
   }, [pathname, loading]);
 
@@ -141,21 +141,21 @@ const SideBar = () => {
                 label: "Delete",
                 danger: true,
                 icon: <DeleteOutlined />,
-                onClick: () => handleDelete(conv.key),
+                onClick: () => handleDelete(conv.id),
               },
             ];
 
             return (
               <Link
-                to={conv.key}
-                key={conv.key}
+                to={conv.id}
+                key={conv.id}
                 className={cn(
-                  conv.key === path ? "bg-neutral-200!" : "hover:bg-neutral-100!",
+                  conv.id === path ? "bg-neutral-200!" : "hover:bg-neutral-100!",
                   "relative mb-1 py-1.5 pl-4 pr-1 rounded-lg cursor-pointer transition-all! duration-300! flex justify-between items-end"
                 )}
               >
                 <div className="w-full">
-                  {editingId === conv.key ? (
+                  {editingId === conv.id ? (
                     <Input
                       value={editingValue}
                       onChange={(e) => setEditingValue(e.target.value)}

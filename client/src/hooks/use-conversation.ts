@@ -1,7 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import { RootState, AppDispatch } from "@/store";
 import {
-  addConversation,
   deleteConversation,
   setConversation,
   revalidateConversation,
@@ -26,7 +25,6 @@ export const useConversationActions = () => {
   const dispatch = useDispatch<AppDispatch>();
 
   return {
-    addConversation: (label: string) => dispatch(addConversation({ label })),
     deleteConversation: (key: string) => dispatch(deleteConversation(key)),
     setConversation: (payload: Conversation[]) => dispatch(setConversation(payload)),
     revalidateConversation: () => dispatch(revalidateConversation()),

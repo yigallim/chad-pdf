@@ -4,11 +4,18 @@ import apiClient from "@/service/api";
 export type PDFMeta = {
   id: string;
   filename: string;
+  word_count: number;
+  loading: boolean;
 };
 
+export type HistoryEntry =
+  | { role: "user"; parts: { text: string }[] }
+  | { role: "model"; parts: { text: string }[] };
+
 export type BaseConversation = {
-  key: string;
+  id: string;
   label: string;
+  history: HistoryEntry[];
   createdAt: number;
 };
 
@@ -28,13 +35,6 @@ const initialState: ConversationState = {
   error: null,
 };
 
-export type ConversationResponse = {
-  id: string;
-  label: string;
-  pdfMeta: PDFMeta[];
-  createdAt: number;
-};
-
 export const revalidateConversation = createAsyncThunk<
   Conversation[],
   void,
@@ -42,15 +42,16 @@ export const revalidateConversation = createAsyncThunk<
 >("conversation/revalidateConversation", async (_, { rejectWithValue }) => {
   try {
     const { data } = await apiClient.get("/conversation");
-    return data.map((item: ConversationResponse) => ({
-      key: item.id,
+    return data.map((item: Conversation) => ({
+      id: item.id,
       label: item.label,
       createdAt: item.createdAt,
       pdfMeta: item.pdfMeta,
+      history: item.history,
     }));
   } catch (error: any) {
     return rejectWithValue(
-      error.response?.data?.message || error.message || "Failed to fetch conversations"
+      error.response?.data?.error || error.message || "Failed to fetch conversations"
     );
   }
 });
@@ -59,17 +60,8 @@ export const conversationSlice = createSlice({
   name: "conversation",
   initialState,
   reducers: {
-    addConversation: (state, action: PayloadAction<{ label: string }>) => {
-      const newConversation: Conversation = {
-        key: `${state.items.length}`,
-        label: action.payload.label,
-        createdAt: Date.now(),
-        pdfMeta: [],
-      };
-      state.items.push(newConversation);
-    },
     deleteConversation: (state, action: PayloadAction<string>) => {
-      state.items = state.items.filter((conv) => conv.key !== action.payload);
+      state.items = state.items.filter((conv) => conv.id !== action.payload);
     },
     setConversation: (state, action: PayloadAction<Conversation[]>) => {
       state.items = action.payload;
@@ -92,5 +84,5 @@ export const conversationSlice = createSlice({
   },
 });
 
-export const { addConversation, deleteConversation, setConversation } = conversationSlice.actions;
+export const { deleteConversation, setConversation } = conversationSlice.actions;
 export default conversationSlice.reducer;

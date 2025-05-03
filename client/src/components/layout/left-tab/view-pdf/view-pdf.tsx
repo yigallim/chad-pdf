@@ -7,8 +7,9 @@ import PDFViewer from "./pdf-viewer";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
 import { App, Button, Empty, Typography } from "antd";
-import ExistingPDFModal, { PDFItem } from "@/components/layout/pdf/existing-pdf-modal";
+import ExistingPDFModal from "@/components/layout/pdf/existing-pdf-modal";
 import UploadPDFModal from "@/components/layout/pdf/upload-pdf-modal";
+import { PDFMeta } from "@/store/slices/conversation-slice";
 
 const maxWidth = 800;
 
@@ -22,7 +23,7 @@ const ViewPDF = () => {
   const [addPDFModalOpen, setAddPDFModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
-  const currentConversation = items.find((item) => item.key === path);
+  const currentConversation = items.find((item) => item.id === path);
   const pdfMeta = currentConversation == undefined ? [] : currentConversation.pdfMeta;
 
   const handleDeletePDF = async (pdfId: string) => {
@@ -30,20 +31,20 @@ const ViewPDF = () => {
     const updatedMeta = currentConversation.pdfMeta.filter((pdf) => pdf.id !== pdfId);
     try {
       await apiClient.patch("/conversation", {
-        id: currentConversation.key,
+        id: currentConversation.id,
         pdfMeta: updatedMeta.map((pdf) => ({ id: pdf.id })),
       });
       message.success("PDF removed from conversation");
     } catch (error: any) {
       const msg =
-        error.response?.data?.message || error.message || "Failed to delete PDF from conversation";
+        error.response?.data?.error || error.message || "Failed to delete PDF from conversation";
       message.error(msg);
     } finally {
       revalidateConversation();
     }
   };
 
-  const handleAddPDFs = async (selectedPDFs: PDFItem[]) => {
+  const handleAddPDFs = async (selectedPDFs: PDFMeta[]) => {
     if (!currentConversation) return;
     const newPDFs = selectedPDFs.filter(
       (pdf) => !currentConversation.pdfMeta.some((meta) => meta.id === pdf.id)
@@ -54,7 +55,7 @@ const ViewPDF = () => {
     }
     try {
       await apiClient.patch("/conversation", {
-        id: currentConversation.key,
+        id: currentConversation.id,
         pdfMeta: [
           ...currentConversation.pdfMeta.map((pdf) => ({ id: pdf.id })),
           ...newPDFs.map((pdf) => ({ id: pdf.id })),
@@ -66,7 +67,7 @@ const ViewPDF = () => {
       );
     } catch (error: any) {
       const msg =
-        error.response?.data?.message || error.message || "Failed to add PDF to conversation";
+        error.response?.data?.error || error.message || "Failed to add PDF to conversation";
       message.error(msg);
     } finally {
       revalidateConversation();
@@ -122,6 +123,11 @@ const ViewPDF = () => {
   }
 
   if (selectedPDF === null) {
+    const pdfCount = pdfMeta.length;
+    const totalWords = pdfMeta.reduce(
+      (sum, pdf) => sum + (pdf.word_count > 0 ? pdf.word_count : 0),
+      0
+    );
     return (
       <>
         <PDFList
@@ -129,6 +135,8 @@ const ViewPDF = () => {
           onSelectPDF={setSelectedPDF}
           onDeletePDF={handleDeletePDF}
           onAddPDF={() => setAddPDFModalOpen(true)}
+          pdfCount={pdfCount}
+          totalWords={totalWords}
         />
         <ExistingPDFModal
           open={addPDFModalOpen}
@@ -137,6 +145,7 @@ const ViewPDF = () => {
           onUploadNew={handleUploadNewPDF}
           disabledPDFIds={pdfMeta.map((pdf) => pdf.id)}
           mode="add"
+          pdfMeta={pdfMeta}
         />
         <UploadPDFModal
           open={uploadModalOpen}

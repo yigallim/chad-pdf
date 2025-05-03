@@ -1,15 +1,17 @@
 import { useMemo, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { pdfjs } from "react-pdf";
-import Chat from "@/components/layout/chat/chat";
-import LeftTab from "@/components/layout/left-tab/left-tab";
-import SideBar from "@/components/layout/conversation/sidebar";
+import { Allotment } from "allotment";
+import { motion } from "framer-motion";
 import { ConfigProvider, App as AntdApp, Typography, Button } from "antd";
 import { CommentOutlined, FileTextOutlined } from "@ant-design/icons";
 import { geekblue } from "@ant-design/colors";
-import { useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
+import Chat from "@/components/layout/chat/chat";
+import LeftTab from "@/components/layout/left-tab/left-tab";
+import SideBar from "@/components/layout/conversation/sidebar";
 import { AnimatedBeam } from "@/components/ui/animated-beam";
-import NewConversation from "./components/layout/conversation/new-conversation";
+import NewConversation from "@/components/layout/conversation/new-conversation";
+import "allotment/dist/style.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -176,10 +178,14 @@ const App = () => {
                 />
               </div>
             ) : (
-              <>
-                <LeftTab />
-                <Chat />
-              </>
+              <Allotment className="h-full w-full" defaultSizes={[5, 5]}>
+                <Allotment.Pane minSize={430}>
+                  <LeftTab />
+                </Allotment.Pane>
+                <Allotment.Pane minSize={500}>
+                  <Chat />
+                </Allotment.Pane>
+              </Allotment>
             )}
           </main>
         </div>
