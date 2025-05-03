@@ -89,7 +89,7 @@ def update_chat_history(chat_id:ObjectId,new_messages:list):
     )
     print(f"✅ Chat history with chat id ('{chat_id}') updated.")
 
-def update_vectorstore_path(chat_id:ObjectId, vectorstore_path):
+def update_vectorstore_path(chat_id:ObjectId, vectorstore_path:str):
     _get_chat(chat_id)
     chat_history_collection.update_one(
         {"_id": chat_id},
