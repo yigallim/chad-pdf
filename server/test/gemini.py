@@ -8,7 +8,7 @@ from typing import Optional
 
 load_dotenv()
 
-GEMINI_TOKEN = os.getenv("GEMINI_API_KEY")[0]
+GEMINI_TOKEN = os.getenv("GEMINI_API_KEY")
 
 def create_chat(history: Optional[list] = None):
     client = genai.Client(api_key=GEMINI_TOKEN)
@@ -57,24 +57,14 @@ def send_message(chat, message, max_retries=5, initial_delay=0.5, max_delay=10):
     else:
         # This should ideally not be reached if there were no retriable errors
         raise Exception("Failed to send message for an unexpected reason after all retries.")
+    
+def summarize(texts):
+    text = " ".join(texts)
+    client = genai.Client(api_key=GEMINI_TOKEN)
 
-# test
-# chat = create_chat()
-# while True:
-#     user_input = input("You: ")
-#     if user_input.lower() in ['exit', 'quit']:
-#         break
+    response = client.models.generate_content(
+        model='gemini-2.0-flash',
+        contents=f"Please summarize the following content: {text}"
+    )
+    return response.text
 
-#     try:
-#         # Call the safe_send_message function
-#         response = send_message(chat, user_input)
-
-#         # Iterate through the response stream and print each chunk
-#         print("Gemini:")
-#         for chunk in response:
-#             print(chunk, end="")
-#         print()  # Add a newline at the end
-
-#     except Exception as e:
-#         print(type(e))
-#         print(f"\nAn error occurred: {e}")
