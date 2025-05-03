@@ -145,7 +145,8 @@ def remove_pdf_from_vectorstore(vectorstore:Chroma, pdf_id:str):
 def update_vectorstore(vectorstore:Chroma, pdf_id:str, pdf_info:list[dict[str, list[str]]]):
     docs=[]
     for page_info in pdf_info:
-        docs=[Document(page_content=chunk, metadata={"pdf_id": pdf_id, "page_num":page_info["page"]}) for chunk in page_info["chunks"]]
+        docs.extend([Document(page_content=chunk, metadata={"pdf_id": pdf_id, "page_num":page_info["page"]}) for chunk in page_info["chunks"]])
+    
     vectorstore.add_documents(docs)
     return vectorstore
 
@@ -227,3 +228,24 @@ def pdf_path_to_vectorstore(pdf_path:str,chat_id:ObjectId, embedding_model_name:
             pdf_ids.append(pdf_id)
             db.update_chat_pdf_ids(chat_id, pdf_ids)
     return vectorstore
+# pdf_paths = [
+#     "C:/Users/Kang/Downloads/1706.03762v7.pdf",
+#     "C:/Users/Kang/Downloads/2010.11929v2.pdf",
+#     "C:/Users/Kang/Downloads/Chapter 1.pdf",
+#     "C:/Users/Kang/Downloads/2501.09801v1.pdf"
+#     ]
+# chat_id = db.create_chat("testing")
+# embedding_model_name = "sentence-transformers/all-MiniLM-L6-v2"
+# vectorstore = None
+# for path in pdf_paths:
+#     vectorstore = pdf_path_to_vectorstore(path, chat_id,embedding_model_name=embedding_model_name, vectorstore=vectorstore)
+
+# query = "what is acting rationally"
+# retrieved_docs = retrieve_relevant_docs(query, vectorstore,top_k=20)
+
+# relevant_chunks = get_chunks_by_docs(retrieved_docs)
+
+# for doc in retrieved_docs:
+#     print("Chunk:", doc.page_content)
+#     print("Page Num:", doc.metadata.get("page_num"))
+#     print("PDF ID:", doc.metadata.get("pdf_id"))

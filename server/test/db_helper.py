@@ -41,7 +41,42 @@ def store_pdf_if_new(file_path):
 
         print(f"📥 Stored new PDF: '{filename}.pdf in pdf_folders/'")
         return result.inserted_id  # New file stored
+
+def delete_pdf(pdf_id: ObjectId):
+    result = pdf_files_collection.delete_one({"_id": pdf_id})
     
+    if result.deleted_count == 0:
+        print(f"❌ PDF ('{pdf_id}') not found or already deleted.")
+        raise ValueError(f"PDF with ID {pdf_id} not found or could not be deleted.")
+    
+    print(f"✅ PDF ('{pdf_id}') deleted successfully.")
+    return True
+
+def _get_pdf(pdf_id:ObjectId):
+    pdf = pdf_files_collection.find_one({"_id": pdf_id})
+    
+    if not pdf:
+        print(f"❌ PDF ('{pdf_id}') not found in MongoDB.")
+        raise ValueError(f"PDF with ID {pdf_id} not found.")
+    return pdf
+
+def update_summary(pdf_id: ObjectId, model_name: str, model_summary: str):
+    _get_pdf(pdf_id)
+    
+    update_key = f"summary.{model_name}"
+
+    result = pdf_files_collection.update_one(
+        {"_id": pdf_id},
+        {"$set": {update_key: model_summary}}
+    )
+
+    if result.matched_count == 0:
+        print(f"❌ Failed to update: PDF with ID {pdf_id} not found.")
+        return False
+
+    print(f"✅ Summary for model '{model_name}' updated for PDF ID {pdf_id}.")
+    return True
+
 def get_filepath(file_path):
     filename = os.path.basename(file_path)
     doc = pdf_files_collection.find_one({"filename": filename})
@@ -76,6 +111,16 @@ def _get_chat(chat_id:ObjectId):
         print(f"❌ Chat ('{chat_id}') not found in MongoDB.")
         raise ValueError(f"Chat with ID {chat_id} not found.")
     return chat
+
+def delete_chat(chat_id: ObjectId):
+    result = chat_history_collection.delete_one({"_id": chat_id})
+    
+    if result.deleted_count == 0:
+        print(f"❌ Chat ('{chat_id}') not found or already deleted.")
+        raise ValueError(f"Chat with ID {chat_id} not found or could not be deleted.")
+    
+    print(f"✅ Chat ('{chat_id}') deleted successfully.")
+    return True
 
 def update_chat_history(chat_id:ObjectId,new_messages:list):
     chat = _get_chat(chat_id)
