@@ -10,30 +10,13 @@ global_vectorstore = None
 
 def process_pdfs(pdf_list):
     global global_vectorstore
-    
     for pdf in pdf_list:
         input_pdf = pdf
         output_pdf = os.path.join("output/", f"{os.path.basename(pdf)}")
         pdf_info=[]
         # process pdf
-        # db.load_pdf_by_filename(pdf)
-       
-        # db.store_pdf_if_new(pdf)
-        
-        # text = "".join(be.get_pdf_content(input_file))
-        # sentiments = be.compute_sentiment(text)
-        # print(sentiments)
-        print(be.get_pdf_content(pdf))
-        print(f"{be.count_words_pdf(pdf)} words")
-        pdf_info = be.extract_information(pdf)
-        for page_info in pdf_info:
-            model_name='all-MiniLM-L6-v2'
-            chunks =  page_info['chunks']
-            if global_vectorstore is None:
-                global_vectorstore = be.get_vectorstore(model_name, pdf_id, chunks)
-            else:
-                be.update_vectorstore(chunks, global_vectorstore)
-            # conversation_chain = be.get_conversation_chain(vectorstore)
+        print(be.get_summary_by_path(pdf))
+        global_vectorstore = be.pdf_path_to_vectorstore(pdf, chat_id, 'all-MiniLM-L6-v2', global_vectorstore)
 
         status_listbox.insert(tk.END, f"Processed: {os.path.basename(pdf)}")
 
@@ -96,12 +79,13 @@ def start_gui():
 # Start GUI in a thread
 gui_thread = threading.Thread(target=start_gui, daemon=True)
 gui_thread.start()
-chat = None
-chat_id = None
+chat_id = db.create_chat('Testing')
 first_time = True
+chat = gemini.create_chat()
 # Main thread for terminal input
 while True:
     try:
+        print(f"Chat History: {chat.get_history()}")
         user_input = input("You: ").strip()
         if user_input.lower() == 'exit':
             print("Exiting...")
@@ -109,32 +93,11 @@ while True:
         if global_vectorstore is None:
             print("Please upload pdf before conversation")
             continue
-        if first_time:
-            id = db.get_all_chat_id()[1]
-            history, chat_name, relevant_pdfs = db.get_historical_chat(id)
-            
-            # in case they delete pdf
-            found_pdf_paths=[]
-            missing_pdf_paths=[]
-            if not relevant_pdfs:
-                for pdf in relevant_pdfs:
-                    local_path = db.get_filepath_by_id(pdf)
-                    if local_path:
-                        found_pdf_paths.append(local_path)
-                    else:
-                        missing_pdf_paths.append(local_path)
-                    
-            chat = gemini.create_chat(history=history)
-            if not id:
-                chat_id = db.create_chat(user_input)
-            first_time=False
         try:
             # Call the safe_send_message function
-            relevant_chunks = be.retrieve_relevant_chunks(user_input,global_vectorstore,3)
-            query = be.get_query_with_context(user_input,relevant_chunks)
-            
+            relevant_chunks = be.retrieve_relevant_docs(user_input,global_vectorstore,3)
+            query = be.get_query_with_context(user_input,be.get_chunks_by_docs(relevant_chunks))
             print("Gemini:")
-            print(query)
             response = gemini.send_message(chat, query)
             chunks = []
             for chunk in response:

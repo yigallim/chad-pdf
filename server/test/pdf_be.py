@@ -3,6 +3,7 @@
 import text_processor as tp
 import db_helper as db
 import gemini
+import groq
 import fitz
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -228,6 +229,38 @@ def pdf_path_to_vectorstore(pdf_path:str,chat_id:ObjectId, embedding_model_name:
             pdf_ids.append(pdf_id)
             db.update_chat_pdf_ids(chat_id, pdf_ids)
     return vectorstore
+
+
+def get_summary_by_path(pdf_path:str):
+    pdf_id = db.store_pdf_if_new(pdf_path)
+    content = get_pdf_content(pdf_path=pdf_path)
+     
+    models = {
+        'gemini': gemini.summarize,
+        'llama': groq.summarize
+    }
+    
+    summaries = dict(map(lambda item: (item[0], item[1](content)), models.items()))
+
+    for model_name, model_summary in summaries.items():
+        db.update_summary(pdf_id=pdf_id, model_name=model_name, model_summary=model_summary)
+        
+    return summaries
+
+
+# from gtts import gTTS
+
+# def text_to_speech(words: str, output_file: str = "output.mp3"):
+#     # Create gTTS object with the input text
+#     tts = gTTS(text=words, lang='en')
+    
+#     # Save the generated speech to an MP3 file
+#     tts.save(output_file)
+#     print(f"MP3 file saved as '{output_file}'")
+
+# # Example usage
+# text_to_speech("Hello! This is a test of Google Text-to-Speech.")
+
 # pdf_paths = [
 #     "C:/Users/Kang/Downloads/1706.03762v7.pdf",
 #     "C:/Users/Kang/Downloads/2010.11929v2.pdf",

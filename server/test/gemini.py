@@ -58,7 +58,7 @@ def send_message(chat, message, max_retries=5, initial_delay=0.5, max_delay=10):
         # This should ideally not be reached if there were no retriable errors
         raise Exception("Failed to send message for an unexpected reason after all retries.")
     
-def summarize(texts):
+def summarize(texts:list[str]):
     text = " ".join(texts)
     client = genai.Client(api_key=GEMINI_TOKEN)
 
