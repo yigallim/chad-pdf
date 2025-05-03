@@ -90,10 +90,13 @@ const ViewPDF = () => {
   };
 
   useEffect(() => {
-    if (selectedPDF !== null) {
+    console.log("selectedPDF", selectedPDF);
+    console.log("selectedPDF !== null", selectedPDF !== null);
+    if (selectedPDF !== null && (selectedPDF < 0 || selectedPDF >= pdfMeta.length)) {
+      console.log("selectedPDF inside", selectedPDF);
       setSelectedPDF(null);
     }
-  }, [path]);
+  }, [pdfMeta, selectedPDF]);
 
   if (pdfMeta.length == 0) {
     return (
@@ -156,14 +159,18 @@ const ViewPDF = () => {
     );
   }
 
-  return (
-    <PDFViewer
-      pdfId={pdfMeta[selectedPDF].id}
-      filename={pdfMeta[selectedPDF].filename}
-      onBack={() => setSelectedPDF(null)}
-      maxWidth={maxWidth}
-    />
-  );
+  if (selectedPDF !== null && selectedPDF >= 0 && selectedPDF < pdfMeta.length) {
+    return (
+      <PDFViewer
+        pdfId={pdfMeta[selectedPDF].id}
+        filename={pdfMeta[selectedPDF].filename}
+        onBack={() => setSelectedPDF(null)}
+        maxWidth={maxWidth}
+      />
+    );
+  }
+
+  return null;
 };
 
 export default ViewPDF;
