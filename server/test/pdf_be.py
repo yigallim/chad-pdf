@@ -213,6 +213,7 @@ def pdf_path_to_vectorstore(pdf_path:str,chat_id:ObjectId, embedding_model_name:
     if not vectorstore:
         if embedding_model_name and pdf_id:
             vectorstore = create_vectorstore(embedding_model_name, pdf_id, pdf_info, str(chat_id))
+            db.update_vectorstore_path(f"./chroma_store/{chat_id}")
             db.update_chat_pdf_ids(chat_id, [pdf_id])
         else:
             print("❌ Please specify chat_id and embedding_model_name.")
