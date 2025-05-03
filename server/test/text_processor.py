@@ -1,9 +1,18 @@
-import spacy.cli
 import spacy
+from spacy.util import is_package
+import subprocess
 import re
 
-spacy.cli.download("en_core_web_sm")
-nlp = spacy.load("en_core_web_sm")
+def load_spacy_model(model_name="en_core_web_sm"):
+    if not is_package(model_name):
+        try:
+            # Attempt to load model directly (might be installed via pip)
+            spacy.load(model_name)
+        except OSError:
+            print(f"Downloading spaCy model: {model_name}")
+            subprocess.run(["python", "-m", "spacy", "download", model_name], check=True)
+    return spacy.load(model_name)
+nlp = load_spacy_model("en_core_web_sm")
 
 def remove_stopwords(text):
     doc = nlp(text)
@@ -16,8 +25,16 @@ def enrich_text_with_entities(text):
     enriched_text = f"{text}\nEntities: {', '.join(entity_strings)}"
     return enriched_text
 
-def clean_symbols(text):
+def remove_symbols(text):
     return re.sub(r'[^\w\s]', '', text)
+
+def remove_extra_space(text):
+    return re.sub(r'\s+', ' ', text.strip())
+
+def remove_non_ascii(text):
+    encoded = text.encode('ascii', errors='ignore')
+    decoded = encoded.decode('ascii')
+    return decoded
 
 def lemmatize(text):
     doc = nlp(text)

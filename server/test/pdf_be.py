@@ -3,8 +3,7 @@
 import gemini
 import db_helper as db
 import text_processor as tp
-import pdfplumber
-import re
+import fitz
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.memory import ConversationBufferMemory
@@ -27,27 +26,19 @@ _safe_nltk_download('tokenizers/punkt')
 
 def count_words_pdf(file_path):
     text = ' '.join(get_pdf_content(file_path))
-
-    text = re.sub(r'\s+', ' ', text.strip())
-    text = tp.clean_symbols(text)
-
+    text = tp.remove_symbols(text)
     words = text.split()
-
     word_count = len(words)
     return word_count
 
 # extract text from pdf
 def get_pdf_content(pdf_path):
     content = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            chars = page.chars
-            text = ""
-            for i, char in enumerate(chars[:-1]):
-                text += char["text"]
-                next_char = chars[i + 1]
-                if next_char["x0"] - (char["x1"]) > 2:  # Adjust threshold
-                    text += " "
+    with fitz.open(pdf_path) as pdf:
+        for page in pdf:
+            text = page.get_text("text")
+            text = tp.remove_non_ascii(text)
+            text = tp.remove_extra_space(text)
             content.append(text)
     return content
 

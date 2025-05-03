@@ -5,7 +5,7 @@ import pdf_be as be
 import db_helper as db
 import threading
 import gemini
-
+import test_text_splitter_2 as ts
 global_vectorstore = None
 
 def process_pdfs(pdf_list):
@@ -23,6 +23,7 @@ def process_pdfs(pdf_list):
         # text = "".join(be.get_pdf_content(input_file))
         # sentiments = be.compute_sentiment(text)
         # print(sentiments)
+        print(be.get_pdf_content(pdf))
         print(f"{be.count_words_pdf(pdf)} words")
         pdf_info = be.extract_information(pdf)
         for page_info in pdf_info:
@@ -110,10 +111,19 @@ while True:
             continue
         if first_time:
             id = db.get_all_chat_id()[1]
-            history = db.get_chat_history(id)
-            print(history)
+            history, chat_name, relevant_pdfs = db.get_historical_chat(id)
+            found_pdf_paths=[]
+            missing_pdf_paths=[]
+            for pdf in relevant_pdfs:
+                local_path = db.get_filepath_by_id(pdf)
+                if local_path:
+                    found_pdf_paths.append(local_path)
+                else:
+                    missing_pdf_paths.append(local_path)
+                    
             chat = gemini.create_chat(history=history)
-            chat_id = db.create_chat(user_input)
+            if not id:
+                chat_id = db.create_chat(user_input)
             first_time=False
         try:
             # Call the safe_send_message function

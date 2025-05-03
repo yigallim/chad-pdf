@@ -1,7 +1,7 @@
 import sys
 import re
 import os
-from pdfminer.high_level import extract_text
+import fitz 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 def extract_and_clean_text_from_pdf(pdf_path):
@@ -10,7 +10,10 @@ def extract_and_clean_text_from_pdf(pdf_path):
     2. remove extra blank lines
     3. collapse all whitespace to single spaces
     """
-    raw_text = extract_text(pdf_path)
+    raw_text = ""
+    with fitz.open(pdf_path) as doc:
+        for page in doc:
+            raw_text += page.get_text("text")
     # remove multiple blank lines, then collapse whitespace
     cleaned = re.sub(r'\n\s*\n', '\n', re.sub(r'\s+', ' ', raw_text.strip()))
     return cleaned
