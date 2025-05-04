@@ -74,7 +74,7 @@ def compute_similarity(pdf_path1:str,pdf_path2:str):
     embeddings = model.encode([text1, text2])
     similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
 
-    return similarity
+    return float(similarity)
 
 def _chunks_for_sentiment(text:str, tokenizer):
     max_tokens = 500
@@ -256,24 +256,75 @@ def compute_bertscore(reference: str, candidate: str, lang: str = 'en') -> dict:
         'recall': R.item(),
         'f1': F1.item()
     }
+    
+def compute_pdf_similarity_summaries(pdf_list: list[str]) -> dict:
+    seen_pairs = []
+    pairwise_scores = []
+    for pdf1 in pdf_list:
+        for pdf2 in pdf_list:
+            if pdf1 == pdf2 or (pdf1, pdf2) in seen_pairs or (pdf2, pdf1) in seen_pairs:
+                continue
+            score = compute_similarity(pdf1,pdf2)
+            pdf1_id = os.path.basename(pdf1)
+            pdf2_id = os.path.basename(pdf2)
+            pairwise_scores.append({
+                "pdf_1": pdf1_id,
+                "pdf_2": pdf2_id,
+                "similarity_score": score
+            })
+            seen_pairs.append((pdf1_id, pdf2_id))
+            
+    if not pairwise_scores:
+        return {
+            "pairwise_scores": [],
+            "most_similar_pair": None,
+            "least_similar_pair": None
+        }
 
-expected = "The capital of France is Paris."
-generated = "Paris is the capital city of France."
+    most_similar = max(pairwise_scores, key=lambda x: x["similarity_score"])
+    least_similar = min(pairwise_scores, key=lambda x: x["similarity_score"])
 
-result = compute_bertscore(expected, generated)
-print(result) # {'precision': 0.9204800128936768, 'recall': 0.9289494752883911, 'f1': 0.9246953129768372}
+    return {
+        "pairwise_scores": pairwise_scores,
+        "most_similar_pair": (most_similar["pdf_1"], most_similar["pdf_2"], most_similar["similarity_score"]),
+        "least_similar_pair": (least_similar["pdf_1"], least_similar["pdf_2"], least_similar["similarity_score"])
+    }
+        
+pdf_list = [
+    "C:/Users/Kang/Downloads/1706.03762v7.pdf",
+    "C:/Users/Kang/Downloads/2010.11929v2.pdf",
+    "C:/Users/Kang/Downloads/Chapter 1.pdf",
+    "C:/Users/Kang/Downloads/2501.09801v1.pdf"
+]
 
-expected = "The capital of France is Paris."
-generated = "Quantum mechanics is a fundamental theory in physics."
+print(compute_pdf_similarity_summaries(pdf_list))
 
-result = compute_bertscore(expected, generated)
-print(result) # {'precision': 0.8371249437332153, 'recall': 0.8564563989639282, 'f1': 0.8466803431510925}
 
-expected = "The capital of France is Paris."
-generated = "The capital of France is Paris."
 
-result = compute_bertscore(expected, generated)
-print(result) # {'precision': 1.0, 'recall': 1.0, 'f1': 1.0}
+
+
+
+
+
+# expected = "The capital of France is Paris."
+# generated = "Paris is the capital city of France."
+
+# result = compute_bertscore(expected, generated)
+# print(result) # {'precision': 0.9204800128936768, 'recall': 0.9289494752883911, 'f1': 0.9246953129768372}
+
+# expected = "The capital of France is Paris."
+# generated = "Quantum mechanics is a fundamental theory in physics."
+
+# result = compute_bertscore(expected, generated)
+# print(result) # {'precision': 0.8371249437332153, 'recall': 0.8564563989639282, 'f1': 0.8466803431510925}
+
+# expected = "The capital of France is Paris."
+# generated = "The capital of France is Paris."
+
+# result = compute_bertscore(expected, generated)
+# print(result) # {'precision': 1.0, 'recall': 1.0, 'f1': 1.0}
+
+
 
 # pdf_paths = [
 #     "C:/Users/Kang/Downloads/1706.03762v7.pdf",
