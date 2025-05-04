@@ -252,28 +252,28 @@ from bert_score import score
 def compute_bertscore(reference: str, candidate: str, lang: str = 'en') -> dict:
     P, R, F1 = score([candidate], [reference], lang=lang, verbose=False)
     return {
-        'precision': P.mean(),
-        'recall': R.mean(),
-        'f1': F1.mean()
+        'precision': P.item(),
+        'recall': R.item(),
+        'f1': F1.item()
     }
 
-# expected = "The capital of France is Paris."
-# generated = "Paris is the capital city of France."
+expected = "The capital of France is Paris."
+generated = "Paris is the capital city of France."
 
-# result = compute_bertscore(expected, generated)
-# print(result) # {'precision': tensor(0.9205), 'recall': tensor(0.9289), 'f1': tensor(0.9247)}
+result = compute_bertscore(expected, generated)
+print(result) # {'precision': 0.9204800128936768, 'recall': 0.9289494752883911, 'f1': 0.9246953129768372}
 
-# expected = "The capital of France is Paris."
-# generated = "Quantum mechanics is a fundamental theory in physics."
+expected = "The capital of France is Paris."
+generated = "Quantum mechanics is a fundamental theory in physics."
 
-# result = compute_bertscore(expected, generated)
-# print(result) # {'precision': tensor(0.8371), 'recall': tensor(0.8565), 'f1': tensor(0.8467)}
+result = compute_bertscore(expected, generated)
+print(result) # {'precision': 0.8371249437332153, 'recall': 0.8564563989639282, 'f1': 0.8466803431510925}
 
-# expected = "The capital of France is Paris."
-# generated = "The capital of France is Paris."
+expected = "The capital of France is Paris."
+generated = "The capital of France is Paris."
 
-# result = compute_bertscore(expected, generated)
-# print(result) #{'precision': tensor(1.), 'recall': tensor(1.), 'f1': tensor(1.)}
+result = compute_bertscore(expected, generated)
+print(result) # {'precision': 1.0, 'recall': 1.0, 'f1': 1.0}
 
 # pdf_paths = [
 #     "C:/Users/Kang/Downloads/1706.03762v7.pdf",
