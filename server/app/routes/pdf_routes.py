@@ -8,34 +8,52 @@ from bson import ObjectId
 from app.utils.response import clean_res
 from flask_cors import cross_origin
 from flask import current_app, send_from_directory
-from app.utils.pdf_preprocess import count_words_pdf, extract_information, store_pdf_chunks_to_chroma
+from app.utils.pdf_preprocess import PDFUtils
+from app.utils.llm_api import LLMApi
 
 pdf_bp = Blueprint('pdf', __name__)
 
-def _async_count_and_update(pdf_id, file_path):
-    try:
-        wc = count_words_pdf(file_path)
-    except Exception:
-        wc = 0
-    mongo.db.pdf_files.update_one(
-        {'_id': pdf_id},
-        {'$set': {'word_count': wc}}
-    )
+def _async_count_and_update(pdf_id, file_path, app):
+    with app.app_context():
+        if not os.path.exists(file_path):
+            app.logger.warning(f"Count aborted: file {file_path} no longer exists")
+            return
 
-def _async_vectorize(pdf_id: str, pdf_path: str, pdf_chunks_collection):
-    try:
-        pdf_info = extract_information(pdf_path)
-        store_pdf_chunks_to_chroma(pdf_id, pdf_info, pdf_chunks_collection)
+        pdf_obj = mongo.db.pdf_files.find_one({'_id': pdf_id})
+        if not pdf_obj:
+            app.logger.warning(f"Count aborted: PDF record {pdf_id} already deleted")
+            return
+        try:
+            wc = PDFUtils.count_words_pdf(file_path)
+        except Exception as e:
+            app.logger.error(f"Word count failed for {pdf_id}: {e}")
+            wc = 0
         mongo.db.pdf_files.update_one(
-            {'_id': ObjectId(pdf_id)},
-            {'$set': {'loading': False}}
+            {'_id': pdf_id},
+            {'$set': {'word_count': wc}}
         )
-    except Exception as e:
-        current_app.logger.error(f"Vectorization failed for {pdf_id}: {e}")
-        mongo.db.pdf_files.update_one(
-            {'_id': ObjectId(pdf_id)},
-            {'$set': {'loading': False}}
-        )
+
+def _async_vectorize(pdf_id: str, pdf_path: str, pdf_chunks_collection, app):
+    with app.app_context():
+        if not os.path.exists(pdf_path):
+            app.logger.warning(f"Vectorize aborted: file {pdf_path} no longer exists")
+            return
+        obj_id = ObjectId(pdf_id)
+        pdf_obj = mongo.db.pdf_files.find_one({'_id': obj_id})
+        if not pdf_obj:
+            app.logger.warning(f"Vectorize aborted: PDF record {pdf_id} already deleted")
+            return
+
+        try:
+            pdf_info = PDFUtils.extract_information(pdf_path)
+            PDFUtils.store_pdf_chunks_to_chroma(pdf_id, pdf_info, pdf_chunks_collection)
+        except Exception as e:
+            app.logger.error(f"Vectorization failed for {pdf_id}: {e}")
+        finally:
+            mongo.db.pdf_files.update_one(
+                {'_id': obj_id},
+                {'$set': {'loading': False}}
+            )
 
 @pdf_bp.route('/pdf', methods=['GET'])
 def get_all_pdf():
@@ -94,13 +112,13 @@ def upload_pdf():
 
     threading.Thread(
         target=_async_count_and_update,
-        args=(pdf_id, saved_path),
+        args=(pdf_id, saved_path, current_app._get_current_object()),
         daemon=True
     ).start()
 
     threading.Thread(
         target=_async_vectorize,
-        args=(str(pdf_id), saved_path, current_app.pdf_chunks_collection),
+        args=(str(pdf_id), saved_path, current_app.pdf_chunks_collection, current_app._get_current_object()),
         daemon=True
     ).start()
 
@@ -155,3 +173,55 @@ def delete_pdf():
 def uploaded_file(filename):
     uploads_dir = os.path.join(current_app.root_path, '..', 'uploads')
     return send_from_directory(uploads_dir, filename)
+
+@pdf_bp.route('/pdf/<pdf_id>/summarize', methods=['POST'])
+def summarize_pdf(pdf_id):
+    try:
+        obj_id = ObjectId(pdf_id)
+    except Exception:
+        return jsonify({'error': 'Invalid PDF ID format'}), 400
+
+    pdf_doc = mongo.db.pdf_files.find_one({'_id': obj_id})
+    if not pdf_doc:
+        return jsonify({'error': 'PDF not found'}), 404
+
+    existing_summary = pdf_doc.get('summary')
+    if existing_summary:
+        return jsonify({
+            'summary': existing_summary,
+            'pdf_id': pdf_id,
+            'cached': True
+        }), 200
+
+    if pdf_doc.get('summarizing', False):
+        return jsonify({'error': 'This PDF is currently being summarized'}), 409
+
+    mongo.db.pdf_files.update_one({'_id': obj_id}, {'$set': {'summarizing': True}})
+
+    filename = f"{pdf_id}.pdf"
+    upload_folder = os.path.join(current_app.root_path, '..', 'uploads')
+    file_path = os.path.join(upload_folder, filename)
+
+    if not os.path.exists(file_path):
+        mongo.db.pdf_files.update_one({'_id': obj_id}, {'$unset': {'summarizing': ""}})
+        return jsonify({'error': 'PDF file not found on server'}), 404
+
+    try:
+        summary = LLMApi.summarize_pdf_with_gemini(file_path)
+    except Exception as e:
+        mongo.db.pdf_files.update_one({'_id': obj_id}, {'$unset': {'summarizing': ""}})
+        return jsonify({'error': f'Failed to summarize PDF: {str(e)}'}), 500
+
+    mongo.db.pdf_files.update_one(
+        {'_id': obj_id},
+        {
+            '$set': {'summary': summary},
+            '$unset': {'summarizing': ""}
+        }
+    )
+
+    return jsonify({
+        'summary': summary,
+        'pdf_id': pdf_id,
+        'cached': False
+    }), 200

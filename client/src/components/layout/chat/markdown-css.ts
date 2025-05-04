@@ -99,12 +99,6 @@ export const MARKDOWN_STYLES = `
     padding: 0;
   }
   
-  .markdown-content .katex-display {
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 1em 0;
-  }
-
   .code-block-wrapper {
     position: relative;
     margin-bottom: 16px;
@@ -192,5 +186,29 @@ export const MARKDOWN_STYLES = `
 
   .copy-icon-small {
     font-size: 10px;
+  }
+  
+  .markdown-content .MathJax {
+    display: inline-block;
+    position: static !important;
+    height: inherit;
+    line-height: inherit;
+  }
+
+  .pdf-link-button {
+    background-color: #e6f7ff;
+    border: 1px solid #91d5ff;
+    color: #1890ff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    margin: 0 2px;
+    transition: background-color 0.3s, border-color 0.3s;
+  }
+
+  .pdf-link-button:hover {
+    background-color: #bae7ff;
+    border-color: #69c0ff;
   }
 `;

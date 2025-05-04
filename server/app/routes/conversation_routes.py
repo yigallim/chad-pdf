@@ -1,8 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from app.extensions import mongo
 from app.utils.response import clean_res
 import time
 from bson import ObjectId
+import os
+from app.utils.llm_api import LLMApi
 
 MAX_WORDS = 50000
 MAX_PDFS = 20
@@ -20,9 +22,11 @@ def get_conversations():
                     if pdf_doc:
                         meta['filename'] = pdf_doc.get('filename')
                         meta['word_count'] = pdf_doc.get('word_count', -1)
+                        meta['summary'] = pdf_doc.get('summary')
                 except Exception:
                     meta['filename'] = None
                     meta['word_count'] = -1
+                    meta['summary'] = None
     cleaned = clean_res(conversations)
     return jsonify(cleaned), 200
 
@@ -147,3 +151,77 @@ def update_conversation():
 
     updated = mongo.db.conversations.find_one({'_id': ObjectId(data['id'])})
     return jsonify(clean_res(updated)), 200
+
+@conversation_bp.route("/conversation/<conversation_id>/summarize-pdfs", methods=["POST"])
+def summarize_all_pdfs(conversation_id):
+    try:
+        conv_id = ObjectId(conversation_id)
+    except Exception:
+        return jsonify({'error': 'Invalid conversation ID format'}), 400
+
+    conversation = mongo.db.conversations.find_one({'_id': conv_id})
+    if not conversation:
+        return jsonify({'error': 'Conversation not found'}), 404
+
+    pdf_meta = conversation.get('pdfMeta', [])
+    if not pdf_meta:
+        return jsonify({'error': 'No PDFs linked to this conversation'}), 400
+
+    upload_folder = os.path.join(current_app.root_path, '..', 'uploads')
+    summaries = []
+
+    for item in pdf_meta:
+        pdf_id = item.get('id')
+        try:
+            obj_id = ObjectId(pdf_id)
+        except Exception:
+            summaries.append({'pdf_id': pdf_id, 'error': 'Invalid PDF ID format'})
+            continue
+
+        pdf_doc = mongo.db.pdf_files.find_one({'_id': obj_id})
+        if not pdf_doc:
+            summaries.append({'pdf_id': pdf_id, 'error': 'PDF not found'})
+            continue
+
+        if pdf_doc.get('summary'):
+            summaries.append({
+                'pdf_id': pdf_id,
+                'summary': pdf_doc['summary'],
+                'cached': True
+            })
+            continue
+
+        if pdf_doc.get('summarizing', False):
+            summaries.append({'pdf_id': pdf_id, 'error': 'Currently being summarized'})
+            continue
+
+        mongo.db.pdf_files.update_one({'_id': obj_id}, {'$set': {'summarizing': True}})
+
+        file_path = os.path.join(upload_folder, f"{pdf_id}.pdf")
+        if not os.path.exists(file_path):
+            mongo.db.pdf_files.update_one({'_id': obj_id}, {'$unset': {'summarizing': ""}})
+            summaries.append({'pdf_id': pdf_id, 'error': 'File not found on server'})
+            continue
+
+        try:
+            summary = LLMApi.summarize_pdf_with_gemini(file_path)
+        except Exception as e:
+            mongo.db.pdf_files.update_one({'_id': obj_id}, {'$unset': {'summarizing': ""}})
+            summaries.append({'pdf_id': pdf_id, 'error': f'Summarization failed: {str(e)}'})
+            continue
+
+        mongo.db.pdf_files.update_one(
+            {'_id': obj_id},
+            {
+                '$set': {'summary': summary},
+                '$unset': {'summarizing': ""}
+            }
+        )
+
+        summaries.append({
+            'pdf_id': pdf_id,
+            'summary': summary,
+            'cached': False
+        })
+
+    return jsonify({'conversation_id': conversation_id, 'summaries': summaries}), 200

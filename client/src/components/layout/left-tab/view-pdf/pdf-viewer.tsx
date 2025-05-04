@@ -13,15 +13,26 @@ type PDFViewerProps = {
   filename: string;
   onBack: () => void;
   maxWidth: number;
+  initialPage?: number | null;
+  onPageNavigated?: () => void;
 };
 
-const PDFViewer = ({ pdfId, filename, onBack, maxWidth }: PDFViewerProps) => {
+const PDFViewer = ({
+  pdfId,
+  filename,
+  onBack,
+  maxWidth,
+  initialPage,
+  onPageNavigated,
+}: PDFViewerProps) => {
   const [numPages, setNumPages] = useState<number>(0);
   const [containerRef, setContainerRef] = useState<HTMLElement | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(maxWidth);
   const [scale, setScale] = useState<number>(1);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [observerActive, setObserverActive] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
   const onResize = useCallback<ResizeObserverCallback>((entries) => {
     const entry = entries[0];
@@ -35,6 +46,8 @@ const PDFViewer = ({ pdfId, filename, onBack, maxWidth }: PDFViewerProps) => {
   function onDocumentLoadSuccess(pdf: PDFDocumentProxy): void {
     setNumPages(pdf.numPages);
     setCurrentPage(1);
+    setObserverActive(false);
+    pageRefs.current = pageRefs.current.slice(0, pdf.numPages);
   }
 
   const width = containerWidth ? Math.min(containerWidth, maxWidth) : maxWidth;
@@ -51,28 +64,76 @@ const PDFViewer = ({ pdfId, filename, onBack, maxWidth }: PDFViewerProps) => {
     setScale(1);
   };
 
-  const handlePageChange = (value: number | null) => {
-    if (value && value >= 1 && value <= numPages) {
-      setCurrentPage(value);
-      const pageDiv = pageRefs.current[value - 1];
-      if (pageDiv && containerRef) {
-        pageDiv.scrollIntoView({ behavior: "smooth", block: "start" });
+  const handlePageChange = useCallback(
+    (value: number | null, scroll: boolean = true) => {
+      if (value && value >= 1 && value <= numPages) {
+        setCurrentPage((prevPage) => {
+          if (prevPage === value) return prevPage;
+
+          if (scroll) {
+            const pageDiv = pageRefs.current[value - 1];
+            if (pageDiv && containerRef) {
+              requestAnimationFrame(() => {
+                console.log("Page div height:", pageDiv.offsetHeight);
+                console.log("Container scrollTop:", containerRef.scrollTop);
+
+                pageDiv.scrollIntoView({ behavior: "smooth", block: "start" });
+              });
+            }
+          }
+          return value;
+        });
       }
-    }
-  };
+    },
+    [numPages, containerRef]
+  );
 
   useEffect(() => {
-    if (!containerRef || numPages === 0) return;
+    if (numPages === 0) return;
 
-    const observer = new window.IntersectionObserver(
+    let activationTimer: NodeJS.Timeout | null = null;
+
+    if (initialPage && initialPage >= 1 && initialPage <= numPages) {
+      handlePageChange(initialPage, true);
+
+      activationTimer = setTimeout(() => {
+        setObserverActive(true);
+        if (onPageNavigated) {
+          onPageNavigated();
+        }
+      }, 500);
+    } else {
+      setObserverActive(true);
+    }
+
+    return () => {
+      if (activationTimer) {
+        clearTimeout(activationTimer);
+      }
+    };
+  }, [initialPage, numPages, handlePageChange, onPageNavigated]);
+
+  useEffect(() => {
+    if (!observerActive || !containerRef || numPages === 0) {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+      return;
+    }
+
+    observerRef.current = new window.IntersectionObserver(
       (entries) => {
         const visibleEntries = entries
           .filter((entry) => entry.isIntersecting)
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+
         if (visibleEntries.length > 0) {
           const pageIndex = Number(visibleEntries[0].target.getAttribute("data-page-index"));
           if (!isNaN(pageIndex)) {
-            setCurrentPage(pageIndex + 1);
+            const newPage = pageIndex + 1;
+
+            setCurrentPage((prevPage) => (newPage !== prevPage ? newPage : prevPage));
           }
         }
       },
@@ -83,13 +144,14 @@ const PDFViewer = ({ pdfId, filename, onBack, maxWidth }: PDFViewerProps) => {
     );
 
     pageRefs.current.forEach((ref) => {
-      if (ref) observer.observe(ref);
+      if (ref) observerRef.current?.observe(ref);
     });
 
     return () => {
-      observer.disconnect();
+      observerRef.current?.disconnect();
+      observerRef.current = null;
     };
-  }, [containerRef, numPages, scale]);
+  }, [observerActive, containerRef, numPages, scale]);
 
   return (
     <div className="flex flex-col h-full w-full relative">
@@ -153,7 +215,7 @@ const PDFViewer = ({ pdfId, filename, onBack, maxWidth }: PDFViewerProps) => {
         currentPage={currentPage}
         numPages={numPages}
         scale={scale}
-        onPageChange={handlePageChange}
+        onPageChange={(value) => handlePageChange(value, true)}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         onResetZoom={resetZoom}

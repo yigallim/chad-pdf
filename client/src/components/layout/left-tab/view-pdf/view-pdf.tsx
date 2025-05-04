@@ -10,6 +10,7 @@ import { App, Button, Empty, Typography } from "antd";
 import ExistingPDFModal from "@/components/layout/pdf/existing-pdf-modal";
 import UploadPDFModal from "@/components/layout/pdf/upload-pdf-modal";
 import { PDFMeta } from "@/store/slices/conversation-slice";
+import PubSub from "pubsub-js";
 
 const maxWidth = 800;
 
@@ -20,6 +21,7 @@ const ViewPDF = () => {
   const { items } = useConversationValue();
   const { revalidateConversation } = useConversationActions();
   const [selectedPDF, setSelectedPDF] = useState<number | null>(null);
+  const [targetPage, setTargetPage] = useState<number | null>(null);
   const [addPDFModalOpen, setAddPDFModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
@@ -90,10 +92,30 @@ const ViewPDF = () => {
   };
 
   useEffect(() => {
-    console.log("selectedPDF", selectedPDF);
-    console.log("selectedPDF !== null", selectedPDF !== null);
+    const token = PubSub.subscribe(
+      "NAVIGATE_TO_PDF",
+      (msg, data: { pdfId: string; pageNumber: number }) => {
+        const pdfIndex = pdfMeta.findIndex((pdf) => pdf.id === data.pdfId);
+        if (pdfIndex !== -1) {
+          setSelectedPDF(pdfIndex);
+          setTargetPage(data.pageNumber);
+        } else {
+          message.warning(`PDF with ID ${data.pdfId} not found in this conversation.`);
+        }
+      }
+    );
+    return () => {
+      PubSub.unsubscribe(token);
+    };
+  }, [pdfMeta, message]);
+  useEffect(() => {
+    if (selectedPDF === null) {
+      setTargetPage(null);
+    }
+  }, [selectedPDF]);
+
+  useEffect(() => {
     if (selectedPDF !== null && (selectedPDF < 0 || selectedPDF >= pdfMeta.length)) {
-      console.log("selectedPDF inside", selectedPDF);
       setSelectedPDF(null);
     }
   }, [pdfMeta, selectedPDF]);
@@ -166,6 +188,8 @@ const ViewPDF = () => {
         filename={pdfMeta[selectedPDF].filename}
         onBack={() => setSelectedPDF(null)}
         maxWidth={maxWidth}
+        initialPage={targetPage}
+        onPageNavigated={() => setTargetPage(null)}
       />
     );
   }

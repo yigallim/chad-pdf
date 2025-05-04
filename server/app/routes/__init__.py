@@ -10,4 +10,3 @@ def register_routes(app):
     app.register_blueprint(vector_bp, url_prefix='/api')
     app.register_blueprint(conversation_chat_bp, url_prefix='/api')
     app.register_blueprint(tts_bp, url_prefix='/api')
-

@@ -307,7 +307,7 @@ export default React.memo(function ExistingPDFModal({
                             onClick={() => !disabled && togglePDFSelection(pdf.id)}
                             className={cn(
                               "overflow-hidden cursor-pointer",
-                              disabled && "opacity-50 pointer-events-none"
+                              disabled && "opacity-50"
                             )}
                             styles={{ body: { padding: "8px 16px" } }}
                             cover={
@@ -320,6 +320,7 @@ export default React.memo(function ExistingPDFModal({
                                   background: "#fafafa",
                                   position: "relative",
                                 }}
+                                className={disabled ? "pointer-events-none" : ""}
                               >
                                 {pdf.word_count === -1 ? (
                                   <Tag

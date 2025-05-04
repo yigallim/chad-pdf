@@ -6,6 +6,7 @@ export type PDFMeta = {
   filename: string;
   word_count: number;
   loading: boolean;
+  summary: string;
 };
 
 export type HistoryEntry =

@@ -5,7 +5,7 @@ import { cn } from "@/libs/utils";
 
 export interface AnimatedBeamProps {
   className?: string;
-  containerRef: RefObject<HTMLElement | null>; // Container ref
+  containerRef: RefObject<HTMLElement | null>;
   fromRef: RefObject<HTMLElement | null>;
   toRef: RefObject<HTMLElement | null>;
   curvature?: number;
@@ -82,23 +82,18 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
       }
     };
 
-    // Initialize ResizeObserver
     const resizeObserver = new ResizeObserver((entries) => {
-      // For all entries, recalculate the path
       for (let entry of entries) {
         updatePath();
       }
     });
 
-    // Observe the container element
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current);
     }
 
-    // Call the updatePath initially to set the initial path
     updatePath();
 
-    // Clean up the observer on component unmount
     return () => {
       resizeObserver.disconnect();
     };
@@ -147,7 +142,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
           transition={{
             delay,
             duration,
-            ease: [0.45, 0, 0.55, 1], // https://easings.net/#easeOutExpo
+            ease: [0.45, 0, 0.55, 1],
             repeat: Infinity,
             repeatDelay: 0,
           }}
