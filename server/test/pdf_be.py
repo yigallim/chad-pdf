@@ -290,20 +290,33 @@ def compute_pdf_similarity_summaries(pdf_list: list[str]) -> dict:
         "least_similar_pair": (least_similar["pdf_1"], least_similar["pdf_2"], least_similar["similarity_score"])
     }
         
-pdf_list = [
-    "C:/Users/Kang/Downloads/1706.03762v7.pdf",
-    "C:/Users/Kang/Downloads/2010.11929v2.pdf",
-    "C:/Users/Kang/Downloads/Chapter 1.pdf",
-    "C:/Users/Kang/Downloads/2501.09801v1.pdf"
-]
-
-print(compute_pdf_similarity_summaries(pdf_list))
 
 
+# expected = "Aditya Mohan’s research interests focus on the real effects of disclosure, institutional investors, and capital markets."
+# generated = ['Aditya Mohan’s research interests include business administration, finance, and economics.'
+#              ,'Aditya Mohan’s research interests are not explicitly mentioned, but based on his education and experience, it can be inferred that his research interests likely relate to finance, economics, or investment strategy.'
+#              ,'Aditya Mohan’s research interests include business administration, finance, and economics, with a focus on asset allocation and investment strategies. His background in energy engineering also suggests potential interdisciplinary interests in energy economics or sustainable finance.']
 
+# for text in generated:
+#     print(compute_bertscore(reference=expected, candidate=text))
 
+def jaccard_similarity(set1, set2):
+    intersection = set1.intersection(set2)
+    union = set1.union(set2)
+    return len(intersection) / len(union)
+while True:
+    text1=input('text1')
+    text2=input('text2')
+    import text_processor as tp
+    text1 = tp.remove_symbols(text1)
+    text2 = tp.remove_symbols(text2)
+    words1 = text1.split()
+    words2 = text2.split()
+    set1 = set(words1)
+    set2 = set(words2)
+    similarity = jaccard_similarity(set1,set2)
 
-
+    print(f"Jaccard Similarity: {similarity:.2f}")
 
 
 # expected = "The capital of France is Paris."
