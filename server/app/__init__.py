@@ -33,12 +33,12 @@ class ChromaEmbeddingFunction:
     def __call__(self, input: List[str]) -> List[List[float]]:
         return self.embedder.embed_documents(input)
 
-embedding_func = ChromaEmbeddingFunction(model_path, model_id)
+# embedding_func = ChromaEmbeddingFunction(model_path, model_id)
 
 chroma_client = chromadb.PersistentClient(path="./chroma_store")
 pdf_chunks_collection = chroma_client.get_or_create_collection(
     name="pdf_chunks",
-    embedding_function=embedding_func
+    # embedding_function=embedding_func
 )
 
 def create_app():

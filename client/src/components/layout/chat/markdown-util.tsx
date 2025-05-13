@@ -24,57 +24,89 @@ export const md = markdownit({
 
 md.use(markdownitMathjax3);
 
-md.inline.ruler.before(
-  "link",
-  "pdf_link",
-  function pdfLink(state, silent) {
-    const startPos = state.pos;
-    if (state.src.slice(startPos, startPos + 4) !== "<!--") {
-      return false;
-    }
+function createPdfLinkButton(commentContent: string) {
+  if (!commentContent.startsWith("pdfnav:")) {
+    return null;
+  }
 
-    const endPos = state.src.indexOf("-->", startPos + 4);
-    if (endPos === -1) {
-      return false;
-    }
+  const pdfNavContent = commentContent.substring("pdfnav:".length).trim();
 
-    const commentContent = state.src.slice(startPos + 4, endPos).trim();
-    if (!commentContent.startsWith("pdfnav:")) {
-      return false;
-    }
+  const nameMatch = /name="([^"]+)"/.exec(pdfNavContent);
+  const pageMatch = /page=(\d+)/.exec(pdfNavContent);
+  const idMatch = /id=([^\s]+)/.exec(pdfNavContent);
 
-    const pdfNavContent = commentContent.substring("pdfnav:".length).trim();
+  if (!nameMatch || !pageMatch || !idMatch) {
+    return null;
+  }
 
-    // Regex to extract attributes: name="...", page=..., id=...
-    const nameMatch = /name="([^"]+)"/.exec(pdfNavContent);
-    const pageMatch = /page=(\d+)/.exec(pdfNavContent);
-    const idMatch = /id=([^\s]+)/.exec(pdfNavContent);
+  const filename = nameMatch[1];
+  const pageNumber = pageMatch[1];
+  const pdfId = idMatch[1];
 
-    if (!nameMatch || !pageMatch || !idMatch) {
-      return false; // Attributes not found or malformed
-    }
+  return `<button class="pdf-link-button" data-pdf-id="${pdfId}" data-page-number="${pageNumber}">${filename}, Page ${pageNumber}</button>`;
+}
 
-    const filename = nameMatch[1];
-    const pageNumber = pageMatch[1];
-    const pdfId = idMatch[1];
+md.inline.ruler.before("link", "pdf_link_inline", function pdfLinkInline(state, silent) {
+  const startPos = state.pos;
+  if (state.src.slice(startPos, startPos + 4) !== "<!--") {
+    return false;
+  }
 
-    if (!silent) {
-      const token = state.push("pdf_link_open", "button", 1);
-      token.attrSet("class", "pdf-link-button");
-      token.attrSet("data-pdf-id", pdfId);
-      token.attrSet("data-page-number", pageNumber);
+  const endPos = state.src.indexOf("-->", startPos + 4);
+  if (endPos === -1) {
+    return false;
+  }
 
-      const textToken = state.push("text", "", 0);
-      textToken.content = `${filename}, Page ${pageNumber}`;
+  const commentContent = state.src.slice(startPos + 4, endPos).trim();
+  const buttonHtml = createPdfLinkButton(commentContent);
 
-      state.push("pdf_link_close", "button", -1);
-    }
+  if (!buttonHtml) {
+    return false;
+  }
 
-    state.pos = endPos + 3; // Move position past '-->'
+  if (!silent) {
+    const token = state.push("html_inline", "", 0);
+    token.content = buttonHtml;
+  }
+
+  state.pos = endPos + 3;
+  return true;
+});
+
+// Add a block rule to handle PDF navigation comments on separate lines
+md.block.ruler.before("html_block", "pdf_link_block", function (state, startLine, _, silent) {
+  const startPos = state.bMarks[startLine] + state.tShift[startLine];
+  const maxPos = state.eMarks[startLine];
+
+  // Check if line starts with HTML comment
+  if (maxPos - startPos < 7 || state.src.slice(startPos, startPos + 4) !== "<!--") {
+    return false;
+  }
+
+  // Find the end of the comment
+  const endPos = state.src.indexOf("-->", startPos + 4);
+  if (endPos === -1 || endPos > state.eMarks[startLine]) {
+    return false;
+  }
+
+  const commentContent = state.src.slice(startPos + 4, endPos).trim();
+  const buttonHtml = createPdfLinkButton(commentContent);
+
+  if (!buttonHtml) {
+    return false;
+  }
+
+  if (silent) {
     return true;
-  },
-  { alt: ["paragraph", "reference", "blockquote", "list"] }
-);
+  }
+
+  const token = state.push("html_block", "", 0);
+  token.map = [startLine, startLine + 1];
+  token.content = buttonHtml;
+
+  state.line = startLine + 1;
+  return true;
+});
 
 const originalCodeRenderer =
   md.renderer.rules.code_block ||

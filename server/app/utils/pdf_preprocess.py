@@ -6,6 +6,9 @@ import spacy
 import subprocess
 from importlib.util import find_spec as is_package
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from itertools import combinations
 
 def load_spacy_model(model_name="en_core_web_sm"):
     if not is_package(model_name):
@@ -41,9 +44,9 @@ class PDFUtils:
 
     @staticmethod
     def remove_non_ascii(text):
-        encoded = text.encode('ascii', errors='ignore')
-        decoded = encoded.decode('ascii')
-        return decoded
+        text = re.sub(r'[\U0001F300-\U0001F6FF]', '', text)
+        text = re.sub(r'[\u2200-\u22FF]', '', text)
+        return text
 
     @staticmethod
     def remove_extra_space(text):
@@ -108,3 +111,28 @@ class PDFUtils:
                 metadatas=metadatas,
                 ids=ids
             )
+
+    @staticmethod
+    def compute_similarity(pdf_path1: str, pdf_path2: str) -> float:
+        text1_pages = PDFUtils.get_pdf_content(pdf_path1)
+        text2_pages = PDFUtils.get_pdf_content(pdf_path2)
+        text1 = " ".join(text1_pages)
+        text2 = " ".join(text2_pages)
+        vectorizer = TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform([text1, text2])
+        similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+        return similarity
+
+    @staticmethod
+    def compute_pdf_similarity_summaries(pdf_list: list[str]) -> list[dict]:
+        pairwise_scores = []
+        for p1, p2 in combinations(pdf_list, 2):
+            score = PDFUtils.compute_similarity(p1, p2)
+            name1 = os.path.splitext(os.path.basename(p1))[0]
+            name2 = os.path.splitext(os.path.basename(p2))[0]
+            pairwise_scores.append({
+                "pdf_1": name1,
+                "pdf_2": name2,
+                "similarity_score": score
+            })
+        return pairwise_scores

@@ -18,6 +18,7 @@ export type BaseConversation = {
   label: string;
   history: HistoryEntry[];
   createdAt: number;
+  calculating_similarity: boolean;
 };
 
 export type Conversation = BaseConversation & { pdfMeta: PDFMeta[] };
@@ -49,6 +50,7 @@ export const revalidateConversation = createAsyncThunk<
       createdAt: item.createdAt,
       pdfMeta: item.pdfMeta,
       history: item.history,
+      calculating_similarity: item.calculating_similarity,
     }));
   } catch (error: any) {
     return rejectWithValue(

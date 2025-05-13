@@ -53,7 +53,6 @@ const useSpeech = (): UseSpeechReturn => {
 
     recognition.onend = () => {
       if (isRecording) {
-        console.log("Speech ended, restarting...");
         recognition.start();
       }
     };

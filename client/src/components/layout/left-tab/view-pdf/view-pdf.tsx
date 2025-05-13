@@ -94,7 +94,7 @@ const ViewPDF = () => {
   useEffect(() => {
     const token = PubSub.subscribe(
       "NAVIGATE_TO_PDF",
-      (msg, data: { pdfId: string; pageNumber: number }) => {
+      (_, data: { pdfId: string; pageNumber: number }) => {
         const pdfIndex = pdfMeta.findIndex((pdf) => pdf.id === data.pdfId);
         if (pdfIndex !== -1) {
           setSelectedPDF(pdfIndex);

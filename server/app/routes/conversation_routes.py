@@ -2,14 +2,67 @@ from flask import Blueprint, request, jsonify, current_app
 from app.extensions import mongo
 from app.utils.response import clean_res
 import time
+import threading
 from bson import ObjectId
 import os
 from app.utils.llm_api import LLMApi
+from app.utils.pdf_preprocess import PDFUtils
 
 MAX_WORDS = 50000
 MAX_PDFS = 20
 
 conversation_bp = Blueprint('conversation', __name__)
+
+def _async_calculate_similarity(conversation_id, app):
+    with app.app_context():
+        try:
+            time.sleep(3)
+            conv_id = ObjectId(conversation_id)
+            conversation = mongo.db.conversations.find_one({'_id': conv_id})
+            if not conversation:
+                app.logger.warning(f"Similarity calculation aborted: Conversation {conversation_id} not found")
+                return
+
+            pdf_meta = conversation.get('pdfMeta', [])
+            if not pdf_meta or len(pdf_meta) < 2:
+                mongo.db.conversations.update_one(
+                    {'_id': conv_id},
+                    {'$set': {'calculating_similarity': False, 'similarity_scores': []}}
+                )
+                return
+
+            upload_folder = os.path.join(app.root_path, '..', 'uploads')
+            pdf_paths = []
+            
+            for item in pdf_meta:
+                pdf_id = item.get('id')
+                file_path = os.path.join(upload_folder, f"{pdf_id}.pdf")
+                if os.path.exists(file_path):
+                    pdf_paths.append(file_path)
+            
+            if len(pdf_paths) < 2:
+                mongo.db.conversations.update_one(
+                    {'_id': conv_id},
+                    {'$set': {'calculating_similarity': False, 'similarity_scores': []}}
+                )
+                return
+                
+            similarity_scores = PDFUtils.compute_pdf_similarity_summaries(pdf_paths)
+            
+            mongo.db.conversations.update_one(
+                {'_id': conv_id},
+                {'$set': {'calculating_similarity': False, 'similarity_scores': similarity_scores}}
+            )
+            
+        except Exception as e:
+            app.logger.error(f"Error calculating similarity for conversation {conversation_id}: {e}")
+            try:
+                mongo.db.conversations.update_one(
+                    {'_id': ObjectId(conversation_id)},
+                    {'$set': {'calculating_similarity': False}}
+                )
+            except:
+                pass
 
 @conversation_bp.route("/conversation", methods=["GET"])
 def get_conversations():
@@ -72,10 +125,20 @@ def create_conversation():
         'label':    label,
         'pdfMeta':  cleaned_meta,
         'history':  [],
-        'createdAt': int(time.time())
+        'createdAt': int(time.time()),
+        'calculating_similarity': len(cleaned_meta) > 1,
+        'similarity_scores': []
     }
     result = mongo.db.conversations.insert_one(conversation_doc)
-    conversation_doc['id'] = str(result.inserted_id)
+    conversation_id = str(result.inserted_id)
+    conversation_doc['id'] = conversation_id
+
+    if len(cleaned_meta) > 1:
+        threading.Thread(
+            target=_async_calculate_similarity,
+            args=(conversation_id, current_app._get_current_object()),
+            daemon=True
+        ).start()
     return jsonify(clean_res(conversation_doc)), 201
 
 @conversation_bp.route("/conversation", methods=["DELETE"])
@@ -104,6 +167,7 @@ def update_conversation():
     if 'label' in data:
         update_fields['label'] = data['label']
 
+    recalculate_similarity = False
     if 'pdfMeta' in data:
         if not isinstance(data['pdfMeta'], list):
             return jsonify({'error': 'pdfMeta must be a list'}), 400
@@ -112,7 +176,6 @@ def update_conversation():
             if not isinstance(item, dict) or 'id' not in item:
                 return jsonify({'error': 'Each pdfMeta item must contain an id'}), 400
 
-        # 2) enforce PDF‐count limit
         if len(data['pdfMeta']) > MAX_PDFS:
             return jsonify({
                 'error': f'You may attach at most {MAX_PDFS} PDFs per conversation.'
@@ -134,6 +197,9 @@ def update_conversation():
             }), 400
 
         update_fields['pdfMeta'] = data['pdfMeta']
+        recalculate_similarity = True
+        update_fields['calculating_similarity'] = len(data['pdfMeta']) > 1
+        update_fields['similarity_scores'] = []
 
     if not update_fields:
         return jsonify({'error': 'No valid fields to update'}), 400
@@ -148,6 +214,13 @@ def update_conversation():
 
     if result.matched_count == 0:
         return jsonify({'error': 'Conversation not found'}), 404
+
+    if recalculate_similarity and len(data['pdfMeta']) > 1:
+        threading.Thread(
+            target=_async_calculate_similarity,
+            args=(data['id'], current_app._get_current_object()),
+            daemon=True
+        ).start()
 
     updated = mongo.db.conversations.find_one({'_id': ObjectId(data['id'])})
     return jsonify(clean_res(updated)), 200

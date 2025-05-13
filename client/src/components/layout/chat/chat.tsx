@@ -1,4 +1,17 @@
-import { Button, Flex, Input, InputRef, Select, Space, Typography, Modal, App } from "antd";
+import {
+  Button,
+  Flex,
+  Input,
+  InputRef,
+  Select,
+  Space,
+  Typography,
+  Modal,
+  App,
+  Popconfirm,
+  Switch,
+  Spin,
+} from "antd";
 import {
   CopyOutlined,
   SendOutlined,
@@ -13,7 +26,7 @@ import { useEffect, useRef, useState } from "react";
 import { MARKDOWN_STYLES } from "./markdown-css";
 import { renderMarkdown } from "./markdown-util";
 import { useLocation } from "react-router-dom";
-import { useConversationValue } from "@/hooks/use-conversation";
+import { useConversationActions, useConversationValue } from "@/hooks/use-conversation";
 import apiClient from "@/service/api";
 import PubSub from "pubsub-js";
 import useSpeech from "@/hooks/use-speech";
@@ -79,7 +92,9 @@ const ModelBubble = ({ content, loading, audioPlaying, setAudioPlaying }: ModelB
               onClick={async () => {
                 try {
                   setAudioPlaying(true);
-                  const response = await apiClient.post("/tts", { text: content });
+                  const response = await apiClient.post("/tts", {
+                    text: content,
+                  });
                   const base64 = response.data.mp3_base64;
 
                   playBase64Mp3(base64, () => {
@@ -111,10 +126,10 @@ type UserBubbleProps = {
 const UserBubble = ({ content, loading }: UserBubbleProps) => {
   return (
     <Bubble
+      shape="round"
       styles={{
-        footer: {
-          marginTop: 6,
-        },
+        footer: { marginTop: 6 },
+        content: { maxWidth: 450 },
       }}
       placement="end"
       loading={loading}
@@ -146,17 +161,24 @@ const Chat = () => {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<InputRef>(null);
   const [selectedModel, setSelectedModel] = useLocalStorage("selectedModel", "llama3-70b-8192");
+  const [useFullPDF, setUseFullPDF] = useLocalStorage("useFullPDF", false);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
+
   const [recordingModalVisible, setRecordingModalVisible] = useState(false);
   const { isRecording, transcript, startRecording, stopRecording } = useSpeech();
   const [audioPlaying, setAudioPlaying] = useState(false);
+
   const { items } = useConversationValue();
+  const { revalidateConversation } = useConversationActions();
+
   const currentConversation = items.find((item) => item.id === path);
   const pdfMeta = currentConversation?.pdfMeta || [];
-  const inputDisabled = pdfMeta.length === 0 || loading || isRecording;
+  const calculatingSimilarity = currentConversation?.calculating_similarity || false;
+  const inputDisabled = pdfMeta.length === 0 || loading || isRecording || calculatingSimilarity;
 
   const handleClearHistory = async () => {
     if (!currentConversation || clearingHistory) return;
@@ -184,10 +206,10 @@ const Chat = () => {
 
     try {
       const { data } = await apiClient.post(`/conversation/${currentConversation.id}`, {
-        // " output in pure sentence, keep it concise."
         message: userMessage.content,
         model: selectedModel,
         embedding_only: false,
+        use_full_pdf: useFullPDF,
       });
       const history = data.history || [];
       const newMessages: Message[] = history
@@ -200,12 +222,32 @@ const Chat = () => {
     } catch (err: any) {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Failed to send message. Please try again." },
+        {
+          role: "assistant",
+          content: "Failed to send message. Please try again.",
+        },
       ]);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    if (calculatingSimilarity) {
+      intervalId = setInterval(() => {
+        console.log("Polling");
+        revalidateConversation();
+      }, 300);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [calculatingSimilarity, revalidateConversation]);
 
   useEffect(() => {
     if (currentConversation && Array.isArray(currentConversation.history)) {
@@ -216,15 +258,15 @@ const Chat = () => {
           content: entry.content || "",
         }));
 
-      if (pdfMeta && pdfMeta.length > 0) {
-        // const firstPdfId = pdfMeta[0].id;
-        // const firstPdfFilename = pdfMeta[0].filename;
-        // const mockPdfLink = `<!-- pdfnav: name="${firstPdfFilename}" page=5 id=${firstPdfId} -->`;
-        // mapped.push({
-        //   role: "assistant",
-        //   content: `Here is a reference to page 5 of your document: ${mockPdfLink}. Click it to navigate.`,
-        // });
-      }
+      // if (pdfMeta && pdfMeta.length > 0) {
+      //   const firstPdfId = pdfMeta[0].id;
+      //   const firstPdfFilename = pdfMeta[0].filename;
+      //   const mockPdfLink = `<!-- pdfnav: name="${firstPdfFilename}" page=5 id=${firstPdfId} -->`;
+      //   mapped.push({
+      //     role: "assistant",
+      //     content: `Here is a reference to page 5 of your document: ${mockPdfLink}. Click it to navigate.`,
+      //   });
+      // }
       setMessages(mapped);
     } else {
       setMessages([]);
@@ -304,6 +346,7 @@ const Chat = () => {
           message: transcript,
           model: selectedModel,
           embedding_only: false,
+          use_full_pdf: useFullPDF,
         })
         .then(({ data }) => {
           const history = data.history || [];
@@ -313,6 +356,10 @@ const Chat = () => {
               role: entry.role,
               content: entry.content || "",
             }));
+          const lastAssistant = [...newMessages].reverse().find((msg) => msg.role === "assistant");
+          if (lastAssistant) {
+            console.log("Assistant replied:", lastAssistant.content);
+          }
           setMessages(newMessages);
         })
         .catch((err: any) => {
@@ -320,7 +367,10 @@ const Chat = () => {
           message.error("Failed to send voice message.");
           setMessages((prev) => [
             ...prev,
-            { role: "assistant", content: "Voice input failed. Please try again." },
+            {
+              role: "assistant",
+              content: "Voice input failed. Please try again.",
+            },
           ]);
         })
         .finally(() => {
@@ -336,16 +386,30 @@ const Chat = () => {
           Conversation
         </Typography.Title>
         <div className="flex items-center gap-2">
-          <Button
-            icon={<DeleteOutlined />}
-            danger
-            onClick={handleClearHistory}
-            loading={clearingHistory}
+          <Popconfirm
+            title="Are you sure you want to clear this conversation?"
+            onConfirm={handleClearHistory}
+            okText="Yes"
+            cancelText="No"
             disabled={!currentConversation || messages.length === 0}
-            title="Clear conversation history"
           >
-            Clear History
-          </Button>
+            <Button
+              icon={<DeleteOutlined />}
+              danger
+              loading={clearingHistory}
+              disabled={!currentConversation || messages.length === 0}
+              title="Clear conversation history"
+            >
+              Clear History
+            </Button>
+          </Popconfirm>
+          <Switch
+            checked={useFullPDF}
+            onChange={setUseFullPDF}
+            checkedChildren="Full"
+            unCheckedChildren="RAG"
+            title="Toggle between RAG or Full PDF"
+          />
           <Select
             variant="borderless"
             value={selectedModel}
@@ -354,7 +418,8 @@ const Chat = () => {
             options={[
               { value: "llama3-70b-8192", label: "Llama-3-70B" },
               { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-              { value: "deepseek/deepseek-chat-v3-0324:free", label: "DeepSeek V3" },
+              // { value: "deepseek/deepseek-chat-v3-0324:free", label: "DeepSeek V3" },
+              { value: "deepseek-chat", label: "DeepSeek V3" },
             ]}
           />
         </div>
@@ -393,9 +458,19 @@ const Chat = () => {
             Please add a PDF to start chatting.
           </Typography.Text>
         )}
+        {calculatingSimilarity && (
+          <Flex align="center" justify="center" gap={8} className="mb-4!">
+            <Typography.Text type="secondary">Calculating document similarity...</Typography.Text>
+            <Spin size="small" />
+          </Flex>
+        )}
         <Space.Compact className="w-full" size="large">
           <Input.TextArea
             ref={inputRef}
+            style={{
+              borderTopRightRadius: 0,
+              borderBottomRightRadius: 0,
+            }}
             placeholder="Ask any question..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -433,7 +508,10 @@ const Chat = () => {
         <div className="text-center py-8">
           <div className="mb-4">
             <AudioOutlined
-              style={{ fontSize: "48px", color: isRecording ? "#ff4d4f" : "#1890ff" }}
+              style={{
+                fontSize: "48px",
+                color: isRecording ? "#ff4d4f" : "#1890ff",
+              }}
             />
           </div>
           <Typography.Title level={5}>

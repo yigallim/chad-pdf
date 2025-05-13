@@ -5,13 +5,14 @@ import time
 from gtts import gTTS
 import io
 import base64
+import os
 from app.utils.embeddings import EmbeddingsUtils
-from app.utils.llm_api import LLMApi, SYSTEM_PROMPT
+from app.utils.llm_api import LLMApi, SYSTEM_PROMPT, FULL_PDF_SYSTEM_PROMPT
 from app.utils.pdf_preprocess import PDFUtils
 
 conversation_chat_bp = Blueprint('conversation_chat', __name__)
 
-def model_reply(user_message, allowed_pdf_ids):
+def embedding_reply(user_message, allowed_pdf_ids):
     collection = current_app.pdf_chunks_collection
     results = EmbeddingsUtils.query_pdf_chunks(collection, user_message, allowed_pdf_ids, n_results=5)
     
@@ -58,9 +59,11 @@ def chat_with_conversation(conversation_id):
     
     user_message = data["message"]
     embedding_only = data.get("embedding_only", False)
+    use_full_pdf = data.get("use_full_pdf", False)
+    similarity_scores = conv.get("similarity_scores", [])
 
     if embedding_only:
-        embeddings_response = model_reply(user_message, allowed_pdf_ids)
+        embeddings_response = embedding_reply(user_message, allowed_pdf_ids)
         return jsonify({
             "history": [
                 {
@@ -83,9 +86,13 @@ def chat_with_conversation(conversation_id):
         {"$push": {"history": user_entry}}
     )
     
-    context_chunks = get_relevant_context(user_message, allowed_pdf_ids)
+    if use_full_pdf:
+        context_chunks = get_full_pdf_context(allowed_pdf_ids)
+    else:
+        context_chunks = get_relevant_context(user_message, allowed_pdf_ids)
+
     history = LLMApi.get_conversation_history(conversation_id)
-    messages = build_llm_messages(history, user_message, context_chunks)
+    messages = build_llm_messages(history, user_message, context_chunks, full_pdf_mode=use_full_pdf, similarity_scores=similarity_scores)
     model = data.get("model", "llama3-70b-8192")
     
     try:
@@ -112,83 +119,7 @@ def chat_with_conversation(conversation_id):
     )
 
     updated = mongo.db.conversations.find_one({"_id": ObjectId(conversation_id)})
-    return jsonify({
-        "history": updated.get("history", [])
-    }), 200
-
-
-def get_relevant_context(user_message, allowed_pdf_ids, n_results=5):
-    collection = current_app.pdf_chunks_collection
-    results = EmbeddingsUtils.query_pdf_chunks(collection, user_message, allowed_pdf_ids, n_results=n_results)
-    
-    if not results or not results['documents'][0]:
-        return []
-    
-    context_chunks = []
-    for i in range(len(results['documents'][0])):
-        chunk_text = results['documents'][0][i]
-        meta = results['metadatas'][0][i]
-        pdf_id = meta.get('pdf_id', 'N/A')
-        page = meta.get('page', 'N/A')
-        
-        context_chunk = f"[PDF: {pdf_id}, Page: {page}] {chunk_text}"
-        context_chunks.append(context_chunk)
-    
-    return context_chunks
-
-
-def build_llm_messages(history, user_message, context_chunks, remove_stopwords=False):
-    # TODO clean markdown, less token, limit context window
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    if remove_stopwords:
-        user_message = PDFUtils.remove_stopwords(user_message)
-        context_chunks = [PDFUtils.remove_stopwords(chunk) for chunk in context_chunks]
-
-    if history:
-        for entry in history[:-1]:
-            messages.append({
-                "role": entry["role"],
-                "content": entry["content"]
-            })
-
-    if context_chunks:
-        formatted_message = LLMApi.build_prompt_with_context(user_message, context_chunks)
-    else:
-        formatted_message = f"{user_message}\n\n(Note: No relevant context was found)"
-    
-    messages.append({"role": "user", "content": formatted_message})
-    return messages
-
-# def build_llm_messages(history, user_message, context_chunks, max_words=1200):
-#     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-#     total_words = PDFUtils.count_words_text(SYSTEM_PROMPT)
-
-#     if context_chunks:
-#         formatted_message = LLMApi.build_prompt_with_context(user_message, context_chunks)
-#     else:
-#         formatted_message = f"{user_message}\n\n(Note: No relevant context was found)"
-#     user_msg_words = PDFUtils.count_words_text(formatted_message)
-
-#     # Step 2: Add history in reverse order to preserve recent messages, limited by word count
-#     selected_history = []
-#     if history:
-#         for entry in reversed(history[:-1]):  # Exclude current message
-#             entry_words = PDFUtils.count_words_text(entry["content"])
-#             if total_words + entry_words + user_msg_words <= max_words:
-#                 selected_history.insert(0, entry)  # prepend to maintain order
-#                 total_words += entry_words
-#             else:
-#                 break
-
-#     # Step 3: Build final message list
-#     for entry in selected_history:
-#         messages.append({
-#             "role": entry["role"],
-#             "content": entry["content"]
-#         })
-#     messages.append({"role": "user", "content": formatted_message})
-#     return messages
+    return jsonify({"history": updated.get("history", [])}), 200
 
 @conversation_chat_bp.route("/conversation/<conversation_id>/with-tts", methods=["POST"])
 def chat_with_conversation_tts(conversation_id):
@@ -209,8 +140,9 @@ def chat_with_conversation_tts(conversation_id):
         return jsonify({"error": "Cannot chat with a conversation without any PDF attached."}), 400
 
     allowed_pdf_ids = [str(item["id"]) if isinstance(item["id"], ObjectId) else str(item["id"]) for item in pdf_meta if "id" in item]
-
     user_message = data["message"]
+    use_full_pdf = data.get("use_full_pdf", False)
+    similarity_scores = conv.get("similarity_scores", [])
 
     user_entry = {
         "role": "user",
@@ -221,9 +153,12 @@ def chat_with_conversation_tts(conversation_id):
         {"$push": {"history": user_entry}}
     )
 
-    context_chunks = get_relevant_context(user_message, allowed_pdf_ids)
+    if use_full_pdf:
+        context_chunks = get_full_pdf_context(allowed_pdf_ids)
+    else:
+        context_chunks = get_relevant_context(user_message, allowed_pdf_ids)
     history = LLMApi.get_conversation_history(conversation_id)
-    messages = build_llm_messages(history, user_message, context_chunks)
+    messages = build_llm_messages(history, user_message, context_chunks, full_pdf_mode=use_full_pdf, similarity_scores=similarity_scores)
     model = data.get("model", "llama3-70b-8192")
 
     try:
@@ -285,3 +220,123 @@ def clear_conversation_history(conversation_id):
         "message": "Conversation history cleared successfully",
         "conversation_id": conversation_id
     }), 200
+
+def get_relevant_context(user_message, allowed_pdf_ids, n_results=5):
+    collection = current_app.pdf_chunks_collection
+    results = EmbeddingsUtils.query_pdf_chunks(collection, user_message, allowed_pdf_ids, n_results=n_results)
+
+    if not results or not results['documents'][0]:
+        return []
+    
+    context_chunks = []
+    for i in range(len(results['documents'][0])):
+        chunk_text = results['documents'][0][i]
+        meta = results['metadatas'][0][i]
+        pdf_id = meta.get('pdf_id', 'N/A')
+        page = meta.get('page', 'N/A')
+
+        try:
+            pdf_doc = mongo.db.pdf_files.find_one({"_id": ObjectId(pdf_id)})
+            filename = pdf_doc.get("filename", "Unknown") if pdf_doc else "Unknown"
+        except Exception:
+            filename = "Unknown"
+
+        pdf_nav = f'<!-- pdfnav: name="{filename}" page={page} id={pdf_id} -->'
+        context_chunk = f"{pdf_nav}\n{chunk_text}"
+        context_chunks.append(context_chunk)
+
+    return context_chunks
+
+def get_full_pdf_context(allowed_pdf_ids):
+    full_pdf_context = []
+
+    for pdf_id in allowed_pdf_ids:
+        try:
+            obj_id = ObjectId(pdf_id)
+            pdf_doc = mongo.db.pdf_files.find_one({'_id': obj_id})
+            if not pdf_doc:
+                continue
+
+            filename = pdf_doc.get("filename", "Unknown")
+            upload_folder = os.path.join(current_app.root_path, '..', 'uploads')
+            file_path = os.path.join(upload_folder, f"{pdf_id}.pdf")
+            print(f"File path: {file_path}")
+            if not os.path.exists(file_path):
+                print("File doesnt exist")
+                continue
+
+            page_texts = PDFUtils.get_pdf_content(file_path)
+
+            for page_num, text in enumerate(page_texts, start=1):
+                pdf_nav = f'<!-- pdfnav: name="{filename}" page={page_num} id={pdf_id} -->'
+                full_pdf_context.append(f"{pdf_nav}\n{text}")
+
+        except Exception as e:
+            current_app.logger.error(f"Error building full context for {pdf_id}: {e}")
+            continue
+
+    return full_pdf_context
+
+def build_llm_messages(history, user_message, context_chunks, remove_stopwords=False, full_pdf_mode=False, similarity_scores=None):
+    # TODO clean markdown, less token, limit context window
+    system_prompt = FULL_PDF_SYSTEM_PROMPT if full_pdf_mode else SYSTEM_PROMPT
+    messages = [{"role": "system", "content": system_prompt}]
+
+    if remove_stopwords:
+        user_message = PDFUtils.remove_stopwords(user_message)
+        context_chunks = [PDFUtils.remove_stopwords(chunk) for chunk in context_chunks]
+
+    if history:
+        for entry in history[:-1]:
+            messages.append({
+                "role": entry["role"],
+                "content": entry["content"]
+            })
+            
+    if similarity_scores:
+        updated_scores = []
+        for score in similarity_scores:
+            pdf_id_1 = score.get('pdf_1')
+            pdf_id_2 = score.get('pdf_2')
+            
+            try:
+                pdf_doc_1 = mongo.db.pdf_files.find_one({"_id": ObjectId(pdf_id_1)})
+                filename_1 = pdf_doc_1.get("filename", "Unknown") if pdf_doc_1 else "Unknown"
+            except Exception:
+                filename_1 = f"Unknown ({pdf_id_1})"
+                
+            try:
+                pdf_doc_2 = mongo.db.pdf_files.find_one({"_id": ObjectId(pdf_id_2)})
+                filename_2 = pdf_doc_2.get("filename", "Unknown") if pdf_doc_2 else "Unknown"
+            except Exception:
+                filename_2 = f"Unknown ({pdf_id_2})"
+                
+            updated_score = {
+                'pdf_1': filename_1,
+                'pdf_2': filename_2,
+                'similarity_score': score.get('similarity_score', 0)
+            }
+            updated_scores.append(updated_score)
+
+        similarity_scores = updated_scores
+
+    # Build the formatted user message with context and/or similarity info
+    if context_chunks:
+        # When context is present, include both context and similarity if available
+        formatted_message = LLMApi.build_prompt_with_context(
+            user_message, context_chunks, full_pdf_mode, similarity_scores
+        )
+    elif similarity_scores:
+        # No context chunks, but we still include similarity information
+        formatted_message = LLMApi.build_prompt_with_context(
+            user_message, [], full_pdf_mode, similarity_scores
+        )
+    else:
+        # Neither context nor similarity info
+        if full_pdf_mode:
+            formatted_message = f"{user_message}\n\n(Note: No PDF document was found)"
+        else:
+            formatted_message = f"{user_message}\n\n(Note: No relevant context was found)"
+
+    messages.append({"role": "user", "content": formatted_message})
+    return messages
