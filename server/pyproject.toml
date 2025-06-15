@@ -1,0 +1,30 @@
+[project]
+name = "chad-pdf"
+version = "0.0.1"
+description = "Chat with PDFs using LLMs - BMCS2123 NLP Assignment"
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    "flask",
+    "flask_pymongo",
+    "flask_cors",
+    "PyMuPDF",
+    "spacy",
+    "langchain",
+    "scikit-learn",
+    "openai",
+    "python-dotenv",
+    "gTTS",
+    "beautifulsoup4",
+    "mistune",
+    "chromadb",
+    "sentence-transformers",
+    "langchain-huggingface"
+]
+
+[build-system]
+requires = ["setuptools>=78.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]

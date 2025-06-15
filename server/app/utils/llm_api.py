@@ -170,6 +170,7 @@ Formatting
 class LLMApi:
     @staticmethod
     def build_prompt_with_context(query: str, context: list[str], full_pdf: bool = False, similarity_scores: list = None) -> str:
+        similarity_scores = None # TODO REMOVE THIS LINE
         header = "FULL PDF CONTENT:" if full_pdf else "CONTENT:"
         context_block = "\n".join(f"{chunk}\n\n" for chunk in context)
         

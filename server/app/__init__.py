@@ -1,12 +1,12 @@
+import os
+import chromadb
 from typing import List
 from flask import Flask
 from .extensions import mongo
 from .routes import register_routes
 from flask_cors import CORS
 from chromadb.config import Settings
-import chromadb
 from langchain_huggingface import HuggingFaceEmbeddings
-import os
 from sentence_transformers import SentenceTransformer
 
 USE_MINI_MODEL = True 
