@@ -2,6 +2,10 @@
 
 Chad PDF is an interactive chat-based application that lets you have intelligent conversations with one or more PDF documents using powerful Language Models (LLMs). Whether you're studying, analyzing papers, or reviewing technical content, Chad PDF enables seamless Q&A.
 
+![Chad PDF](./home-page.png)
+
+![Chad PDF](./demo.png)
+
 ---
 
 ## ✨ Features
@@ -41,6 +45,7 @@ Chad PDF is an interactive chat-based application that lets you have intelligent
 - **Text-to-Speech**: Listen to AI-generated answers spoken aloud for accessibility or hands-free usage.
 
 ### 🧠 Summarization
+
 - One click summarization of conversation document
 
 ### ⚙️ Input Optimization & Safeguards
@@ -68,5 +73,3 @@ Built with **Python + Flask**.
 - **Vector Store**: ChromaDB for embeddings and similarity search.
 - **PDF Parsing**: PyMuPDF, BeautifulSoup, Mistune.
 - **Extras**: gTTS for optional voice features.
-
-
