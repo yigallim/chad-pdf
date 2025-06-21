@@ -4,6 +4,8 @@ Chad PDF is an interactive chat-based application that lets you have intelligent
 
 ![Chad PDF](./home-page.png)
 
+![Chad PDF](./navigate.png)
+
 ![Chad PDF](./demo.png)
 
 ---
