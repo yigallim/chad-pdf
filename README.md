@@ -12,7 +12,13 @@ Chad PDF is an interactive chat-based application that lets you have intelligent
 
 ## 📄 Documentation
 
-- [📘 Technical Report (BMCS2123 202501 Assignment)](./BMCS2123%20202501%20Assignment%20Specification.pdf) – Full project report detailing system design, methodology, evaluation metrics, and testing results.
+- [📘 Technical Report (BMCS2123 202501 Assignment)](./documentation.pdf) – Full project report detailing system design, methodology, evaluation metrics, and testing results.
+
+---
+
+## 🧩 System Architecture
+
+![Architecture](./architecture.png)
 
 ---
 
