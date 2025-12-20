@@ -2,7 +2,7 @@
 name = "chad-pdf"
 version = "0.0.1"
 description = "Chat with PDFs using LLMs - BMCS2123 NLP Assignment"
-requires-python = ">=3.12,<3.13"
+requires-python = "==3.12.9"
 
 dependencies = [
     "flask",
@@ -10,7 +10,8 @@ dependencies = [
     "flask_cors",
     "PyMuPDF",
     "spacy",
-    "langchain",
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "langchain==0.3.27",
     "scikit-learn",
     "openai",
     "python-dotenv",

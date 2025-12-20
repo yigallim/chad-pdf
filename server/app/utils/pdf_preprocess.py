@@ -3,6 +3,7 @@ import re
 import fitz
 import time
 import spacy
+import sys
 import subprocess
 from importlib.util import find_spec as is_package
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -13,10 +14,10 @@ from itertools import combinations
 def load_spacy_model(model_name="en_core_web_sm"):
     if not is_package(model_name):
         try:
-            spacy.load(model_name)
+            return spacy.load(model_name)
         except OSError:
             print(f"Downloading spaCy model: {model_name}")
-            subprocess.run(["python", "-m", "spacy", "download", model_name], check=True)
+            subprocess.run([sys.executable, "-m", "spacy", "download", model_name], check=True)
     return spacy.load(model_name)
 
 nlp = load_spacy_model("en_core_web_sm")
