@@ -1,16 +1,23 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, Response, stream_with_context
+import json
 from app.extensions import mongo
+import redis
 from bson import ObjectId
 import time
 from gtts import gTTS
 import io
 import base64
 import os
+import threading
 from app.utils.embeddings import EmbeddingsUtils
 from app.utils.llm_api import LLMApi, SYSTEM_PROMPT, FULL_PDF_SYSTEM_PROMPT
 from app.utils.pdf_preprocess import PDFUtils
 
 conversation_chat_bp = Blueprint('conversation_chat', __name__)
+
+# Initialize synchronous Redis client for background threads and event streams
+# Using default localhost:6379/0 as per extensions.py default, or load from env if needed
+sync_redis = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
 
 def embedding_reply(user_message, allowed_pdf_ids):
     collection = current_app.pdf_chunks_collection
@@ -36,6 +43,74 @@ def embedding_reply(user_message, allowed_pdf_ids):
         markdown_chunks.append(markdown_chunk)
     
     return "\n\n".join(markdown_chunks)
+
+def generate_background(conversation_id, message_id, model, messages):
+    stream_key = f"chat_stream:{conversation_id}"
+    full_response_content = []
+    
+    # Clear existing stream for this conversation if any (assuming single threaded chat per conv)
+    # Actually, we shouldn't delete if we support multiple users, but per conversation ID it's properly sequential usually.
+    # To be safe for "resume", we want the stream to be there. We should expire it later.
+    # If we delete here, we lose the previous message stream if the user was just reading it? 
+    # Better to just append. The client filters by message_id.
+    # But to prevent infinite growth, we set an expiry on every write.
+    
+    try:
+        sync_redis.xadd(stream_key, {
+            "type": "start",
+            "message_id": message_id
+        })
+        sync_redis.expire(stream_key, 300) # 5 minutes TTL
+
+        for chunk in LLMApi.stream_message(model, messages):
+            full_response_content.append(chunk)
+            sync_redis.xadd(stream_key, {
+                "type": "chunk",
+                "content": chunk,
+                "message_id": message_id
+            })
+            sync_redis.expire(stream_key, 300)
+    except Exception as e:
+        error_message = f"Error communicating with LLM API: {str(e)}"
+        
+        # Publish error
+        sync_redis.xadd(stream_key, {
+            "type": "error",
+            "error": error_message,
+            "message_id": message_id
+        })
+        
+        # Save error to DB
+        model_entry = {
+            "role": "assistant",
+            "content": error_message,
+            "id": message_id
+        }
+        mongo.db.conversations.update_one(
+            {"_id": ObjectId(conversation_id)},
+            {"$push": {"history": model_entry}}
+        )
+        return
+
+    # Save success response to DB
+    assistant_response = "".join(full_response_content)
+    model_entry = {
+        "role": "assistant",
+        "content": assistant_response,
+        "id": message_id
+    }
+    mongo.db.conversations.update_one(
+        {"_id": ObjectId(conversation_id)},
+        {"$push": {"history": model_entry}}
+    )
+    
+    sync_redis.xadd(stream_key, {
+        "type": "end",
+        "message_id": message_id
+    })
+    sync_redis.expire(stream_key, 300)
+
+
 
 @conversation_chat_bp.route("/conversation/<conversation_id>", methods=["POST"])
 def chat_with_conversation(conversation_id):
@@ -77,9 +152,11 @@ def chat_with_conversation(conversation_id):
             ]
         }), 200
 
+    user_id = str(ObjectId())
     user_entry = {
         "role": "user",
-        "content": user_message
+        "content": user_message,
+        "id": user_id
     }
     mongo.db.conversations.update_one(
         {"_id": ObjectId(conversation_id)},
@@ -95,31 +172,52 @@ def chat_with_conversation(conversation_id):
     messages = build_llm_messages(history, user_message, context_chunks, full_pdf_mode=use_full_pdf, similarity_scores=similarity_scores)
     model = data.get("model", "llama3-70b-8192")
     
-    try:
-        assistant_response = LLMApi.send_message(model, messages)
-    except Exception as e:
-        error_message = f"Error communicating with LLM API: {str(e)}"
-        model_entry = {
-            "role": "assistant",
-            "content": error_message
-        }
-        mongo.db.conversations.update_one(
-            {"_id": ObjectId(conversation_id)},
-            {"$push": {"history": model_entry}}
-        )
-        return jsonify({"error": error_message}), 500
-    
-    model_entry = {
-        "role": "assistant",
-        "content": assistant_response
-    }
-    mongo.db.conversations.update_one(
-        {"_id": ObjectId(conversation_id)},
-        {"$push": {"history": model_entry}}
-    )
+    # Generate ID for the upcoming assistant message
+    assistant_message_id = str(ObjectId())
 
-    updated = mongo.db.conversations.find_one({"_id": ObjectId(conversation_id)})
-    return jsonify({"history": updated.get("history", [])}), 200
+    # Start background generation
+    thread = threading.Thread(
+        target=generate_background,
+        args=(conversation_id, assistant_message_id, model, messages)
+    )
+    thread.start()
+
+    return jsonify({
+        "status": "queued",
+        "message_id": assistant_message_id,
+        "user_message_id": user_id
+    }), 200
+
+@conversation_chat_bp.route("/conversation/<conversation_id>/stream", methods=["GET"])
+def stream_conversation(conversation_id):
+    def event_stream():
+        stream_key = f"chat_stream:{conversation_id}"
+        last_id = request.args.get('last_id', '0-0')
+        
+        while True:
+            try:
+                # Read new messages from Redis Stream
+                # Block for 10 seconds (10000ms) to keep connection open but allow heartbeat
+                entries = sync_redis.xread({stream_key: last_id}, count=None, block=10000)
+                
+                if entries:
+                    for key, messages in entries:
+                        for message_id, data in messages:
+                            last_id = message_id
+                            # Yield data as SSE
+                            yield f"data: {json.dumps(data)}\n\n"
+                            
+                            # If end of message, we might consider stopping or just keep listening?
+                            # For durable connection, we keep listening.
+                else:
+                    # Send a keep-alive comment
+                    yield ": keep-alive\n\n"
+                    
+            except Exception as e:
+                print(f"Stream error: {e}")
+                break
+
+    return Response(stream_with_context(event_stream()), mimetype="text/event-stream")
 
 @conversation_chat_bp.route("/conversation/<conversation_id>/with-tts", methods=["POST"])
 def chat_with_conversation_tts(conversation_id):

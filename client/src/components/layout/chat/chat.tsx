@@ -32,6 +32,7 @@ import PubSub from "pubsub-js";
 import useSpeech from "@/hooks/use-speech";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { playBase64Mp3, stopCurrentAudio } from "@/libs/utils";
+import { BASE_API_URL } from "@/service/api";
 
 const modelAvatar: React.CSSProperties = {
   backgroundColor: "transparent",
@@ -152,6 +153,8 @@ const UserBubble = ({ content, loading }: UserBubbleProps) => {
 type Message = {
   role: "user" | "assistant";
   content: string;
+  id?: string;
+  isComplete?: boolean;
 };
 
 const Chat = () => {
@@ -168,6 +171,10 @@ const Chat = () => {
   const [loading, setLoading] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
 
+  // We rely on the stream for "isStreaming" logic implicitly
+  // But we can track if we are waiting for a response to setup the placeholder
+  const [sending, setSending] = useState(false);
+
   const [recordingModalVisible, setRecordingModalVisible] = useState(false);
   const { isRecording, transcript, startRecording, stopRecording } = useSpeech();
   const [audioPlaying, setAudioPlaying] = useState(false);
@@ -178,7 +185,71 @@ const Chat = () => {
   const currentConversation = items.find((item) => item.id === path);
   const pdfMeta = currentConversation?.pdfMeta || [];
   const calculatingSimilarity = currentConversation?.calculating_similarity || false;
-  const inputDisabled = pdfMeta.length === 0 || loading || isRecording || calculatingSimilarity;
+  const inputDisabled =
+    pdfMeta.length === 0 || loading || sending || isRecording || calculatingSimilarity;
+
+  console.log("messages", messages);
+  // Stream Effect
+  useEffect(() => {
+    if (!currentConversation?.id) return;
+
+    const streamUrl = `${BASE_API_URL}/conversation/${currentConversation.id}/stream`;
+    const eventSource = new EventSource(streamUrl);
+
+    eventSource.onmessage = (event) => {
+      if (event.data === ": keep-alive") return;
+      try {
+        const data = JSON.parse(event.data);
+        const { type, content, message_id, error } = data;
+
+        if (type === "chunk" && message_id) {
+          setMessages((prev) => {
+            const existingIndex = prev.findIndex((m) => m.id === message_id);
+            if (existingIndex !== -1) {
+              const msg = prev[existingIndex];
+              // If marked complete (from DB), ignore stream chunks to avoid dupes
+              if (msg.isComplete) return prev;
+
+              const newMessages = [...prev];
+              newMessages[existingIndex] = { ...msg, content: msg.content + content };
+              return newMessages;
+            } else {
+              // Message not found, create it (Resuming case)
+              return [...prev, { role: "assistant", content, id: message_id, isComplete: false }];
+            }
+          });
+          setLoading(false);
+        } else if (type === "end" && message_id) {
+          setMessages((prev) => {
+            const existingIndex = prev.findIndex((m) => m.id === message_id);
+            if (existingIndex !== -1) {
+              const newMessages = [...prev];
+              newMessages[existingIndex] = { ...newMessages[existingIndex], isComplete: true };
+              return newMessages;
+            }
+            return prev;
+          });
+          setLoading(false);
+          // Optional: Revalidating conversation here might be good to ensure DB sync, but maybe overkill
+        } else if (type === "error") {
+          console.error("Stream Error:", error);
+          message.error(error || "Stream error occurred");
+          setLoading(false);
+        }
+      } catch (e) {
+        console.error("Error parsing stream event:", e);
+      }
+    };
+
+    eventSource.onerror = (e) => {
+      // console.log("Stream closed or error", e);
+      // EventSource tries to reconnect automatically.
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [currentConversation?.id, message]);
 
   const handleClearHistory = async () => {
     if (!currentConversation || clearingHistory) return;
@@ -197,38 +268,82 @@ const Chat = () => {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || loading || pdfMeta.length === 0 || !currentConversation) return;
+    if (!input.trim() || loading || sending || pdfMeta.length === 0 || !currentConversation) return;
 
-    const userMessage: Message = { role: "user", content: input };
+    const tempUserId = Date.now().toString(); // Temporary ID until we reload or just use it
+    const userMessage: Message = { role: "user", content: input, id: tempUserId, isComplete: true };
+
+    // Optimistic User Message
     setMessages((prev) => [...prev, userMessage]);
+
     setInput("");
-    setLoading(true);
+    setLoading(true); // Assistant loading
+    setSending(true);
 
     try {
-      const { data } = await apiClient.post(`/conversation/${currentConversation.id}`, {
-        message: userMessage.content,
-        model: selectedModel,
-        embedding_only: false,
-        use_full_pdf: useFullPDF,
+      const response = await fetch(`${BASE_API_URL}/conversation/${currentConversation.id}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: userMessage.content,
+          model: selectedModel,
+          embedding_only: false,
+          use_full_pdf: useFullPDF,
+        }),
       });
-      const history = data.history || [];
-      const newMessages: Message[] = history
-        .filter((entry: any) => entry.role === "user" || entry.role === "assistant")
-        .map((entry: any) => ({
+
+      if (!response.ok) {
+        throw new Error("Failed to send message");
+      }
+
+      const data = await response.json();
+
+      if (data.status === "queued" && data.message_id) {
+        // Create placeholder for assistant message
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "",
+            id: data.message_id,
+            isComplete: false,
+          },
+        ]);
+        // Update user message id if returned (optional, but good for consistency)
+        if (data.user_message_id) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === tempUserId ? { ...m, id: data.user_message_id } : m))
+          );
+        }
+      } else if (data.history) {
+        // Fallback if backend returns full history (e.g. embedding only mode)
+        // Just replace messages?
+        // map to conform to Message type
+        const mapped: Message[] = data.history.map((entry: any) => ({
           role: entry.role,
           content: entry.content || "",
+          id: entry.id || entry._id || undefined,
+          isComplete: true,
         }));
-      setMessages(newMessages);
+        setMessages(mapped);
+        setLoading(false);
+      }
     } catch (err: any) {
+      console.error(err);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content: "Failed to send message. Please try again.",
+          id: Date.now().toString(),
+          isComplete: true,
         },
       ]);
-    } finally {
       setLoading(false);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -256,17 +371,10 @@ const Chat = () => {
         .map((entry: any) => ({
           role: entry.role,
           content: entry.content || "",
+          id: entry.id || entry._id || undefined, // Use provided ID
+          isComplete: true, // Loaded from DB => Complete
         }));
 
-      // if (pdfMeta && pdfMeta.length > 0) {
-      //   const firstPdfId = pdfMeta[0].id;
-      //   const firstPdfFilename = pdfMeta[0].filename;
-      //   const mockPdfLink = `<!-- pdfnav: name="${firstPdfFilename}" page=5 id=${firstPdfId} -->`;
-      //   mapped.push({
-      //     role: "assistant",
-      //     content: `Here is a reference to page 5 of your document: ${mockPdfLink}. Click it to navigate.`,
-      //   });
-      // }
       setMessages(mapped);
     } else {
       setMessages([]);
@@ -281,7 +389,7 @@ const Chat = () => {
 
   useEffect(() => {
     setTimeout(() => {
-      setLoading(false);
+      // clean up initial loading state if any
     }, 500);
 
     const styleElement = document.createElement("style");
@@ -335,10 +443,18 @@ const Chat = () => {
 
   useEffect(() => {
     if (!isRecording && transcript && currentConversation) {
-      console.log("Transcript captured:", transcript);
+      // console.log("Transcript captured:", transcript);
       setLoading(true);
+      // Logic for transcript sending would mirror handleSend but implemented separately here
+      // For brevity, reusing similar logic manually
 
-      const userMessage: Message = { role: "user", content: transcript };
+      const tempUserId = Date.now().toString();
+      const userMessage: Message = {
+        role: "user",
+        content: transcript,
+        id: tempUserId,
+        isComplete: true,
+      };
       setMessages((prev) => [...prev, userMessage]);
 
       apiClient
@@ -349,18 +465,26 @@ const Chat = () => {
           use_full_pdf: useFullPDF,
         })
         .then(({ data }) => {
-          const history = data.history || [];
-          const newMessages: Message[] = history
-            .filter((entry: any) => entry.role === "user" || entry.role === "assistant")
-            .map((entry: any) => ({
+          if (data.status === "queued" && data.message_id) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: "",
+                id: data.message_id,
+                isComplete: false,
+              },
+            ]);
+          } else if (data.history) {
+            // ... existing logic fallback
+            const mapped: Message[] = data.history.map((entry: any) => ({
               role: entry.role,
               content: entry.content || "",
+              id: entry.id,
+              isComplete: true,
             }));
-          const lastAssistant = [...newMessages].reverse().find((msg) => msg.role === "assistant");
-          if (lastAssistant) {
-            console.log("Assistant replied:", lastAssistant.content);
+            setMessages(mapped);
           }
-          setMessages(newMessages);
         })
         .catch((err: any) => {
           console.error("Error sending transcript:", err);
@@ -370,10 +494,9 @@ const Chat = () => {
             {
               role: "assistant",
               content: "Voice input failed. Please try again.",
+              isComplete: true,
             },
           ]);
-        })
-        .finally(() => {
           setLoading(false);
         });
     }
@@ -434,19 +557,22 @@ const Chat = () => {
                 <ModelBubble
                   key={idx}
                   content={msg.content}
-                  loading={false}
+                  loading={!msg.isComplete && msg.content === ""}
                   audioPlaying={audioPlaying}
                   setAudioPlaying={setAudioPlaying}
                 />
               )
             )}
-            {loading && (
-              <ModelBubble
-                content=""
-                loading={true}
-                audioPlaying={audioPlaying}
-                setAudioPlaying={setAudioPlaying}
-              />
+            {/* Loading spinner is now handled by the last message bubble having loading state if needed */}
+            {/* But if we are sending and haven't got the placeholder yet, maybe show something? */}
+            {sending && !messages.find((m) => m.id === "temp-assistant") && (
+              // Actually handleSend adds placeholder after response.
+              // We could add a temp placeholder immediately but it's fast enough usually.
+              // Or just show nothing until placeholder arrives.
+              // The 'loading' state handles 'User sent' -> 'Placeholder arrives'.
+              // If we want a bubble immediately:
+              // We could add one. But let's stick to 'response => placeholder'.
+              <></>
             )}
             <div ref={bottomRef} />
           </Flex>

@@ -20,7 +20,8 @@ dependencies = [
     "mistune",
     "chromadb",
     "sentence-transformers",
-    "langchain-huggingface"
+    "langchain-huggingface",
+    "redis>=7.1.0",
 ]
 
 [build-system]

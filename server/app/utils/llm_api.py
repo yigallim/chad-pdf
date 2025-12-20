@@ -234,6 +234,44 @@ class LLMApi:
         raise RuntimeError(f"All API keys exhausted for model group '{group}'.")
 
     @staticmethod
+    def stream_message(model_name: str, history: List[Dict[str, str]]):
+        group = MODEL_GROUPS.get(model_name)
+        if not group:
+            raise ValueError(f"Unknown model name: {model_name}")
+
+        base_url = BASE_URLS[group]
+        api_keys = API_KEYS[group]
+
+        print("\n\n\n=== Conversation History (Streaming) ===")
+        for i, msg in enumerate(history):
+            role = msg.get("role", "unknown").upper()
+            content = msg.get("content", "")
+            print(f"{i+1}. [{role}]")
+            print(f"{'-' * 10}\n{content}\n")
+
+        for api_key in api_keys:
+            try:
+                client = OpenAI(api_key=api_key, base_url=base_url)
+                stream = client.chat.completions.create(
+                    model=model_name,
+                    messages=history,
+                    stream=True,
+                )
+                for chunk in stream:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        yield content
+                return
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "quota" in error_msg or "limit" in error_msg or "unauthorized" in error_msg:
+                    print(f"API Key failed: {str(e)} - Trying next key...")
+                    continue
+                else:
+                    raise e
+        raise RuntimeError(f"All API keys exhausted for model group '{group}'.")
+
+    @staticmethod
     def get_conversation_history(conversation_id: str):
         try:
             conv = mongo.db.conversations.find_one({"_id": ObjectId(conversation_id)})
